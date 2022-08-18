@@ -16,7 +16,8 @@ class ArrowCanvas:
         self.resolution = resolution
         self.fig, self.ax = self._set_figax()
 
-    def _set_figax(self):
+    @staticmethod
+    def _set_figax():
         fig, ax = plt.subplots(1, figsize=(5, 5))
         ax.margins(0)
         ax.set_xlim([-1, 1])
@@ -98,7 +99,8 @@ class ArrowCanvas:
         for arrow_angle in self._arrow_angles:
             self._add_arrow(arrow_angle + rotation_rad)
 
-    def show(self):
+    @staticmethod
+    def show():
         plt.show()
 
 
