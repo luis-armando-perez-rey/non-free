@@ -1,11 +1,7 @@
-import torch
-import torch.nn.functional as F
-import numpy as np
 import os
-from pytorch3d.transforms import matrix_to_quaternion, quaternion_to_matrix, so3_log_map
-import matplotlib.pyplot as plt
-from scipy.linalg import logm
-import ipdb
+
+import numpy as np
+import torch
 from torch import distributions as D
 
 pi = torch.tensor(np.pi)
@@ -23,8 +19,6 @@ def discrete_rot(z, angle, N):
     idx = torch.arange(N).view((1, N)).repeat((z.shape[0], 1)).to(z.device)
     idx_rolled = torch.remainder(idx + delta, N * torch.ones(idx.shape).to(z.device))
     redundant = z[:, idx_rolled.long()]
-
-
     return torch.diagonal(redundant, dim1=0, dim2=1).T
 
 def prob_loss(mean1, var1, mean2, var2, N):

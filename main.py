@@ -1,19 +1,6 @@
-from multiprocessing.sharedctypes import Value
-import torch
 import torch.utils.data
-from torch import nn, optim, save, load
-from torch.nn import functional as F
-from torchvision import datasets, transforms
-from torchvision.utils import save_image
-from torchvision import transforms
-import numpy as np
-from operator import mul
-from functools import reduce
-import os
-import matplotlib.pyplot as plt
-import argparse
+from torch import save
 import pickle
-import math
 
 from models.models_nn import *
 from utils.nn_utils import *
@@ -22,9 +9,6 @@ from models.resnet import *
 
 # Import datasets
 from datasets.equiv_dset import *
-
-from torchvision.utils import make_grid
-
 
 torch.cuda.empty_cache()
 
@@ -52,7 +36,11 @@ pickle.dump({'args': args}, open(meta_file, 'wb'))
 
 # Set dataset
 if args.dataset == 'rot-square':
-    dset = EquivDataset(f'{args.data_dir}/rot_square/')
+    dset = EquivDataset(f'{args.data_dir}/square/')
+elif args.dataset == 'rot-arrows':
+    dset = EquivDataset(f'{args.data_dir}/arrows/')
+else:
+    raise ValueError(f'Dataset {args.dataset} not supported')
 
 
 dset, dset_test = torch.utils.data.random_split(dset, [len(dset) - int(len(dset)/10), int(len(dset)/10)])

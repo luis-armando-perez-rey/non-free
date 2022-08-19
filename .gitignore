@@ -133,3 +133,5 @@ dmypy.json
 
 # Ignore pycharm files
 .idea
+# Ignore visualizations
+visualizations/
