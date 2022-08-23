@@ -1,9 +1,9 @@
-import numpy as np
 import os
+import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from skimage.transform import resize
-from typing import Tuple
+from typing import Tuple, Optional, List
 
 
 class ArrowCanvas:
@@ -104,35 +104,92 @@ class ArrowCanvas:
         plt.show()
 
 
-N = 20000
-
-equiv_data = []
-equiv_lbls = []
-
+num_arrows_list = [3, 4]
 dataset_folder = "../data/arrows"
-os.makedirs(dataset_folder, exist_ok=True)
 
-for i in range(N):
-    print(i)
-    c1 = ArrowCanvas(num_arrows=4, color="tab:red", style="simple")
-    c2 = ArrowCanvas(num_arrows=4, color="tab:red", style="simple")
-    angle1 = np.pi * np.random.random()
-    angle2 = np.pi * np.random.random()
 
-    c1.add_arrows(rotation_rad=angle1)
-    c2.add_arrows(rotation_rad=angle2)
+def generate_training_data(num_arrows_list, dataset_folder, dataset_name, style_list: Optional[List[str]] = None,
+                           color_list: Optional[List[str]] = None, radius_list: Optional[List[float]] = None,
+                           examples_per_num_arrows: int = 100,
+                           resolution=(64, 64)):
+    equiv_data = []
+    equiv_lbls = []
+    equiv_stabilizers = []
+    if not os.path.exists(dataset_folder):
+        os.makedirs(dataset_folder)
+    if style_list is None:
+        style_list = ["simple", "fancy", "wedge", "fork", "triangle"]
+    if color_list is None:
+        color_list = ["tab:blue", "tab:orange", "tab:green", "tab:red", "tab:purple"]
+    if radius_list is None:
+        radius_list = [1.0]
+    for num_arrows in num_arrows_list:
+        for style in style_list:
+            for color in color_list:
+                for radius in radius_list:
+                    for num_example in range(examples_per_num_arrows):
+                        print(
+                            "Generating image with num arrows {}, style {}, color {}, radius {}, num example {}".format(
+                                num_arrows, style, color, radius, num_example))
+                        c1 = ArrowCanvas(num_arrows=num_arrows, color=color, style=style, radius=radius,
+                                         resolution=resolution)
+                        c2 = ArrowCanvas(num_arrows=num_arrows, color=color, style=style, radius=radius,
+                                         resolution=resolution)
+                        angle1 = np.pi * np.random.random()
+                        angle2 = np.pi * np.random.random()
 
-    img1 = c1.numpy_torch_img
-    img2 = c2.numpy_torch_img
-    angle = angle2 - angle1
+                        c1.add_arrows(rotation_rad=angle1)
+                        c2.add_arrows(rotation_rad=angle2)
 
-    equiv_data.append([img1, img2])
-    equiv_lbls.append(angle)
-    plt.close("all")
+                        img1 = c1.numpy_torch_img
+                        img2 = c2.numpy_torch_img
+                        angle = angle2 - angle1
 
-equiv_data = np.array(equiv_data)
-equiv_lbls = np.array(equiv_lbls)
-print(equiv_data.shape, equiv_lbls.shape)
+                        equiv_data.append([img1, img2])
+                        equiv_lbls.append(angle)
+                        equiv_stabilizers.append(num_arrows)
+                        plt.close("all")
+    equiv_data = np.array(equiv_data)
+    equiv_lbls = np.array(equiv_lbls)
+    equiv_stabilizers = np.array(equiv_stabilizers)
 
-np.save(os.path.join(dataset_folder, 'equiv_data.npy'), equiv_data)
-np.save(os.path.join(dataset_folder, 'equiv_lbls.npy'), equiv_lbls)
+    np.save(os.path.join(dataset_folder, dataset_name + '_data.npy'), equiv_data)
+    np.save(os.path.join(dataset_folder, dataset_name + '_lbls.npy'), equiv_lbls)
+    np.save(os.path.join(dataset_folder, dataset_name + '_stabilizers.npy'), equiv_stabilizers)
+
+
+def generate_eval_data(num_arrows_list, dataset_folder, dataset_name, style_list: Optional[List[str]] = None,
+                       color_list: Optional[List[str]] = None, radius_list: Optional[List[float]] = None,
+                       total_rotations: int = 36,
+                       resolution=(64, 64)):
+    if not os.path.exists(dataset_folder):
+        os.makedirs(dataset_folder)
+    if style_list is None:
+        style_list = ["simple", "fancy", "wedge", "fork", "triangle"]
+    if color_list is None:
+        color_list = ["red", "green", "blue", "yellow", "cyan", "magenta"]
+    if radius_list is None:
+        radius_list = [1.0]
+
+    # Regular dataset
+    images = []
+    stabilizers = []
+    for num_arrows in num_arrows_list:
+        for style in style_list:
+            for color in color_list:
+                for radius in radius_list:
+                    images_per_object = []
+                    for num_angle, angle in enumerate(2 * np.pi * np.linspace(0, 1, total_rotations)):
+                        print(num_arrows, num_angle)
+                        c = ArrowCanvas(num_arrows=num_arrows, color=color, style=style, radius=radius,
+                                        resolution=resolution)
+                        c.add_arrows(rotation_rad=angle)
+                        img = c.numpy_torch_img
+                        images_per_object.append(img)
+                        plt.close("all")
+                    images.append(images_per_object)
+                    stabilizers.append([num_arrows] * total_rotations)
+    images = np.array(images)
+    stabilizers = np.array(stabilizers)
+    np.save(os.path.join(dataset_folder, dataset_name + '_eval_data.npy'), images)
+    np.save(os.path.join(dataset_folder, dataset_name + '_eval_stabilizers.npy'), stabilizers)

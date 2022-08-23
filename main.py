@@ -19,8 +19,6 @@ torch.manual_seed(args.seed)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print('Using device: ', device)
 
-
-
 # Save paths
 MODEL_PATH = os.path.join(args.checkpoints_dir, args.model_name)
 
@@ -35,20 +33,19 @@ make_dir(figures_dir)
 pickle.dump({'args': args}, open(meta_file, 'wb'))
 
 # Set dataset
+print(f"Loading dataset {args.dataset} with dataset name {args.dataset_name}")
 if args.dataset == 'rot-square':
-    dset = EquivDataset(f'{args.data_dir}/square/')
+    dset = EquivDataset(f'{args.data_dir}/square/', dataset_name=args.dataset_name)
 elif args.dataset == 'rot-arrows':
-    dset = EquivDataset(f'{args.data_dir}/arrows/')
+    dset = EquivDataset(f'{args.data_dir}/arrows/', dataset_name=args.dataset_name)
 else:
     raise ValueError(f'Dataset {args.dataset} not supported')
 
-
-dset, dset_test = torch.utils.data.random_split(dset, [len(dset) - int(len(dset)/10), int(len(dset)/10)])
+dset, dset_test = torch.utils.data.random_split(dset, [len(dset) - int(len(dset) / 10), int(len(dset) / 10)])
 train_loader = torch.utils.data.DataLoader(dset,
                                            batch_size=args.batch_size, shuffle=True)
 val_loader = torch.utils.data.DataLoader(dset_test,
-                                            batch_size=args.batch_size, shuffle=True)
-
+                                         batch_size=args.batch_size, shuffle=True)
 
 print("# train set:", len(dset))
 print("# test set:", len(dset_test))
@@ -57,15 +54,22 @@ print("# test set:", len(dset_test))
 img, _, acn = next(iter(train_loader))
 img_shape = img.shape[1:]
 
-N = args.num
-extra_dim = args.extra_dim
+N = args.num # number of Gaussians for the mixture model
+extra_dim = args.extra_dim # the invariant component
 
 if args.model == 'cnn':
     model = MDN(img_shape[0], 2, N, extra_dim).to(device)
 
-
 optimizer = optim.Adam(model.parameters(), lr=args.lr)
 errors = []
+
+
+def make_rotation_matrix(action):
+    s = torch.sin(action)
+    c = torch.cos(action)
+    rot = torch.stack([torch.stack([c, -s]), torch.stack([s, c])]).permute((2, 0, 1)).unsqueeze(1)
+    return rot
+
 
 def train(epoch, data_loader, mode='train'):
     mu_loss = 0
@@ -82,35 +86,36 @@ def train(epoch, data_loader, mode='train'):
         elif mode == 'val':
             model.eval()
 
-
         img = img.to(device)
         img_next = img_next.to(device)
         action = action.to(device).squeeze(1)
 
         z_mean, z_logvar, extra = model(img)
         z_mean_next, z_logvar_next, extra_next = model(img_next)
-        z_logvar = -4.6*torch.ones(z_logvar.shape).to(z_logvar.device)
-        z_logvar_next = -4.6*torch.ones(z_logvar.shape).to(z_logvar.device)
+        z_logvar = -4.6 * torch.ones(z_logvar.shape).to(z_logvar.device)
+        z_logvar_next = -4.6 * torch.ones(z_logvar.shape).to(z_logvar.device)
 
-        s = torch.sin(action)
-        c = torch.cos(action)
-        rot = torch.stack([torch.stack([c, -s]), torch.stack([s, c])]).permute((2,0,1)).unsqueeze(1)
 
-        z_mean_pred = (rot @ z_mean.unsqueeze(-1).detach()).squeeze(-1)  #Beware the detach!!!
 
-        #Probabilistic losses (cross-entropy, Chamfer etc)
-        #loss = prob_loss(z_mean_next, z_logvar_next, z_mean_pred, z_logvar, N)
+        rot = make_rotation_matrix(action)
+
+        # The predicted z_mean after applying the rotation corresponding to the action
+        z_mean_pred = (rot @ z_mean.unsqueeze(-1).detach()).squeeze(-1)  # Beware the detach!!!
+
+        # Probabilistic losses (cross-entropy, Chamfer etc)
+        # loss = prob_loss(z_mean_next, z_logvar_next, z_mean_pred, z_logvar, N)
         loss_equiv = prob_loss(z_mean_pred, z_logvar, z_mean_next, z_logvar_next, N)
-        #loss = ((z_mean_pred.unsqueeze(1) - z_mean_next.unsqueeze(2))**2).sum(-1).min(dim=-1)[0].max(dim=-1)[0].mean() #Chamfer/Hausdorff loss
+        # loss = ((z_mean_pred.unsqueeze(1) - z_mean_next.unsqueeze(2))**2).sum(-1).min(dim=-1)[0].max(dim=-1)[0].mean() #Chamfer/Hausdorff loss
 
         if extra_dim > 0:
-            #Contrastive Loss: infoNCE w/ cosine similariy
+            # Contrastive Loss: infoNCE w/ cosine similariy
             distance_matrix = (extra.unsqueeze(1) * extra_next.unsqueeze(0)).sum(-1) / args.tau
-            loss_contra = -torch.mean((extra * extra_next).sum(-1) / args.tau - torch.logsumexp(distance_matrix, dim=-1))
+            # print("Extra shape", extra.shape)
+            loss_contra = -torch.mean(
+                (extra * extra_next).sum(-1) / args.tau - torch.logsumexp(distance_matrix, dim=-1))
             loss = loss_equiv + loss_contra
         else:
             loss = loss_equiv
-
 
         print(f"{mode.upper()} Epoch: {epoch}, Batch: {batch_idx} of {len(data_loader)} Loss: {loss:.3}")
 
@@ -122,16 +127,12 @@ def train(epoch, data_loader, mode='train'):
 
     mu_loss /= len(data_loader)
 
-
-
     if mode == 'val':
         errors.append(mu_loss)
         np.save(f'{MODEL_PATH}/errors_val.npy', errors)
 
         if (epoch % args.save_interval) == 0:
             save(model, model_file)
-
-
 
 
 if __name__ == "__main__":

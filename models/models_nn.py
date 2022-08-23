@@ -29,7 +29,13 @@ class MDN(nn.Module):
 
 
 class BaseEncoder(nn.Module):
-    def __init__(self, nc, latent_dim):
+    def __init__(self, nc: int, latent_dim: int):
+        """
+        Based convolutional neural network encoder that takes images with nc channels and returns a latent vector of
+        latent_dim dimensions.
+        :param nc: number of input channels
+        :param latent_dim: output latent dimension
+        """
         super().__init__()
         self.encoder = nn.Sequential(
             nn.Conv2d(nc, 64, 4, 2, 1),

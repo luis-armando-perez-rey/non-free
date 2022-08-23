@@ -10,8 +10,13 @@ from torch import load
 from datasets.equiv_dset import *
 from utils.nn_utils import *
 
+# Import plotting utils
+from utils.plotting_utils import plot_extra_dims, plot_images_distributions, plot_embeddings_eval
+
 parser = argparse.ArgumentParser()
 parser.add_argument('--save-folder', type=str, default='checkpoints', help='Path to saved model')
+parser.add_argument('--dataset', type=str, default='dataset', help='Dataset')
+parser.add_argument('--dataset_name', type=str, default='4', help='Dataset name')
 args_eval = parser.parse_args()
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -22,11 +27,15 @@ model_file = os.path.join(args_eval.save_folder, 'model.pt')
 meta_file = os.path.join(args_eval.save_folder, 'metadata.pkl')
 args = pickle.load(open(meta_file, 'rb'))['args']
 
-print(args.dataset)
+print(args)
 if args.dataset == 'rot-square':
-    dset = EquivDataset(f'{args.data_dir}/square/')
+    dset = EquivDataset(f'{args.data_dir}/square/', dataset_name=args.dataset_name)
 elif args.dataset == 'rot-arrows':
-    dset = EquivDataset(f'{args.data_dir}/arrows/')
+    print(args.dataset_name)
+    dset = EquivDatasetStabs(f'{args.data_dir}/arrows/', dataset_name=args.dataset_name)
+    dset_eval = EvalDataset(f'{args.data_dir}/arrows/', dataset_name=args.dataset_name)
+    eval_images = torch.FloatTensor(dset_eval.data.reshape(-1, *dset_eval.data.shape[-3:]))
+    stabilizers = dset_eval.stabs
 else:
     raise ValueError(f'Dataset {args.dataset} not supported')
 
@@ -36,7 +45,15 @@ device = 'cpu'
 model = load(model_file).to(device)
 model.eval()
 
-img, img_next, action = next(iter(train_loader))
+if args.dataset == "rot-arrows":
+    img, img_next, action, n_stabilizers = next(iter(train_loader))
+    mean_eval, logvar_eval, extra_eval = model(eval_images.to(device))
+    logvar_eval = -4.6 * torch.ones(logvar_eval.shape).to(logvar_eval.device)
+    std_eval = np.exp(logvar_eval.detach().cpu().numpy() / 2.) / 10
+else:
+    img, img_next, action = next(iter(train_loader))
+    n_stabilizers = None
+
 img_shape = img.shape[1:]
 npimages = np.transpose(img.detach().cpu().numpy(), axes=[0, 2, 3, 1])
 npimages_next = np.transpose(img_next.detach().cpu().numpy(), axes=[0, 2, 3, 1])
@@ -64,52 +81,22 @@ action = action.detach().cpu().numpy()
 N = args.num
 extra_dim = args.extra_dim
 
-if extra_dim > 0:
-    plt.figure()
-    plt.title('First two orbit dimensions')
-    plt.scatter(extra[:, 0], extra[:, 1])
-    plt.show()
-
-save_folder = "./visualizations"
+save_folder = os.path.join(".", "visualizations", args.model_name)
 os.makedirs(save_folder, exist_ok=True)
-plt.figure()
-for i in range(100):
-    print('action: ', 360 * action[i] / (2 * pi))
-    print(mean[i, 0])
 
-    plt.subplot(2, 2, 1)
-    plt.gca().set_aspect('equal', adjustable='box')
-    plt.gca().set_xlim(0, 1)
-    plt.gca().set_ylim(0, 1)
-    plt.title('first')
-    plt.imshow(npimages[i], interpolation='nearest', extent=(0, 1, 0, 1))
+fig, ax = plot_extra_dims(extra, color_labels=n_stabilizers)
+if fig:
+    fig.savefig(os.path.join(save_folder, 'invariant.png'))
 
-    plt.subplot(2, 2, 2)
-    plt.gca().set_aspect('equal', adjustable='box')
-    plt.gca().set_xlim(0, 1)
-    plt.gca().set_ylim(0, 1)
-    plt.title('second')
-    plt.imshow(npimages_next[i], interpolation='nearest', extent=(0, 1, 0, 1))
-
-    plt.subplot(2, 2, 3)
-    plt.gca().set_aspect('equal', adjustable='box')
-    plt.gca().set_xlim(-1, 1)
-    plt.gca().set_ylim(-1, 1)
-    plt.title('before rot')
-    for j in range(N):
-        ellipse_j = Ellipse(xy=(mean[i, j, 0], mean[i, j, 1]), width=std[i, j, 0], height=std[i, j, 1], color='black',
-                            linewidth=15, alpha=0.8)
-        plt.gca().add_artist(ellipse_j)
-
-    plt.subplot(2, 2, 4)
-    plt.gca().set_aspect('equal', adjustable='box')
-    plt.gca().set_xlim(-1, 1)
-    plt.gca().set_ylim(-1, 1)
-    plt.title('after rot')
-    for j in range(N):
-        ellipse_j = Ellipse(xy=(mean_next[i, j, 0], mean_next[i, j, 1]), width=std_next[i, j, 0],
-                            height=std_next[i, j, 1], color='black', linewidth=15, alpha=0.8)
-        plt.gca().add_artist(ellipse_j)
-    plt.savefig(os.path.join(save_folder, f"test_{i}.png"), bbox_inches='tight')
-    plt.show()
+for i in range(10):
+    print(f"Plotting example {i}")
+    fig, axes = plot_images_distributions(mean[i], std[i], mean_next[i], std_next[i], npimages[i], npimages_next[i], N)
+    fig.savefig(os.path.join(save_folder, f"test_{i}.png"), bbox_inches='tight')
     plt.close("all")
+
+
+fig, axes = plot_embeddings_eval(mean_eval, std_eval, N, stabilizers[0])
+fig.savefig(os.path.join(save_folder, f"eval_embeddings.png"), bbox_inches='tight')
+
+
+

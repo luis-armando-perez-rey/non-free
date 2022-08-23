@@ -16,6 +16,7 @@ def get_args():
 
     # Dataset
     parser.add_argument('--dataset', default='multi-sprites', type=str, help="Dataset")
+    parser.add_argument('--dataset_name', default='4', type=str, help="Dataset name")
     parser.add_argument('--batch-size', type=int, default=16, help="Batch size")
 
     parser.add_argument('--model-name', required=True, type=str, help="Name of model")
