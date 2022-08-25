@@ -23,19 +23,19 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # torch.manual_seed(42)
 torch.cuda.empty_cache()
 
-model_file = os.path.join(args_eval.save_folder, 'model.pt')
-meta_file = os.path.join(args_eval.save_folder, 'metadata.pkl')
+model_dir = "./saved_models"
+model_file = os.path.join(model_dir, args_eval.save_folder, 'model.pt')
+meta_file = os.path.join(model_dir, args_eval.save_folder, 'metadata.pkl')
 args = pickle.load(open(meta_file, 'rb'))['args']
 
 print(args)
 if args.dataset == 'rot-square':
     dset = EquivDataset(f'{args.data_dir}/square/', dataset_name=args.dataset_name)
 elif args.dataset == 'rot-arrows':
-    print(args.dataset_name)
     dset = EquivDatasetStabs(f'{args.data_dir}/arrows/', dataset_name=args.dataset_name)
     dset_eval = EvalDataset(f'{args.data_dir}/arrows/', dataset_name=args.dataset_name)
     eval_images = torch.FloatTensor(dset_eval.data.reshape(-1, *dset_eval.data.shape[-3:]))
-    stabilizers = dset_eval.stabs
+    stabilizers = dset_eval.stabs.reshape((-1))
 else:
     raise ValueError(f'Dataset {args.dataset} not supported')
 
@@ -94,9 +94,10 @@ for i in range(10):
     fig.savefig(os.path.join(save_folder, f"test_{i}.png"), bbox_inches='tight')
     plt.close("all")
 
-
-fig, axes = plot_embeddings_eval(mean_eval, std_eval, N, stabilizers[0])
-fig.savefig(os.path.join(save_folder, f"eval_embeddings.png"), bbox_inches='tight')
+for num_unique, unique in enumerate(np.unique(stabilizers)):
+    boolean_selection = (stabilizers == unique)
+    fig, axes = plot_embeddings_eval(mean_eval[boolean_selection], std_eval[boolean_selection], N, stabilizers[boolean_selection])
+    fig.savefig(os.path.join(save_folder, f"{unique}_eval_embeddings.png"), bbox_inches='tight')
 
 
 
