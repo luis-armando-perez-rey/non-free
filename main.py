@@ -60,8 +60,7 @@ img_shape = img.shape[1:]
 N = args.num
 extra_dim = args.extra_dim
 
-if args.model == 'cnn':
-    model = MDN(img_shape[0], 2, N, extra_dim).to(device)
+model = MDN(img_shape[0], 2, N, extra_dim, model=args.model).to(device)
 
 
 optimizer = optim.Adam(model.parameters(), lr=args.lr)
@@ -98,7 +97,7 @@ def train(epoch, data_loader, mode='train'):
 
         z_mean_pred = (rot @ z_mean.unsqueeze(-1).detach()).squeeze(-1)  #Beware the detach!!!
 
-        #Probabilistic losses (cross-entropy, Chamfer etc)
+        #Probabilistic losses (cross-entropy, Chamfer etc)              
         #loss = prob_loss(z_mean_next, z_logvar_next, z_mean_pred, z_logvar, N)
         loss_equiv = prob_loss(z_mean_pred, z_logvar, z_mean_next, z_logvar_next, N)
         #loss = ((z_mean_pred.unsqueeze(1) - z_mean_next.unsqueeze(2))**2).sum(-1).min(dim=-1)[0].max(dim=-1)[0].mean() #Chamfer/Hausdorff loss
