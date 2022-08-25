@@ -135,8 +135,8 @@ def generate_training_data(num_arrows_list, dataset_folder, dataset_name, style_
                                          resolution=resolution)
                         c2 = ArrowCanvas(num_arrows=num_arrows, color=color, style=style, radius=radius,
                                          resolution=resolution)
-                        angle1 = np.pi * np.random.random()
-                        angle2 = np.pi * np.random.random()
+                        angle1 = 2 * np.pi * np.random.random()
+                        angle2 = 2 * np.pi * np.random.random()
 
                         c1.add_arrows(rotation_rad=angle1)
                         c2.add_arrows(rotation_rad=angle2)
