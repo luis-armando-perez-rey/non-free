@@ -106,16 +106,24 @@ class ArrowCanvas:
 
 N = 20000
 
+
 equiv_data = []
 equiv_lbls = []
 
 dataset_folder = "../data/arrows"
 os.makedirs(dataset_folder, exist_ok=True)
 
+
+
 for i in range(N):
     print(i)
-    c1 = ArrowCanvas(num_arrows=4, color="tab:red", style="simple")
-    c2 = ArrowCanvas(num_arrows=4, color="tab:red", style="simple")
+    eps = np.random.rand()
+    if eps < 0.5:
+        num_arrows = 4 #np.random.randint(low=3, high=6)
+    else:
+        num_arrows = 7
+    c1 = ArrowCanvas(num_arrows=num_arrows, color="tab:red", style="simple")
+    c2 = ArrowCanvas(num_arrows=num_arrows, color="tab:red", style="simple")
     angle1 = np.pi * np.random.random()
     angle2 = np.pi * np.random.random()
 
