@@ -11,10 +11,11 @@ class View(nn.Module):
 
 
 class MDN(nn.Module):
-    def __init__(self, nc, latent_dim, N, extra_dim=0):
+    def __init__(self, nc, latent_dim, N, extra_dim=0, normalize_extra=True):
         super().__init__()
         self.encoder = BaseEncoder(nc, 3 * N + extra_dim)  # works only for latent_dim=2!
         self.latent_dim = latent_dim
+        self.normalize_extra = normalize_extra
         self.extra_dim = extra_dim
         self.N = N
 
@@ -23,7 +24,10 @@ class MDN(nn.Module):
         mean_pre = z[:, :self.N]
         mean = torch.cat((torch.cos(mean_pre).unsqueeze(-1), torch.sin(mean_pre).unsqueeze(-1)), dim=-1)
         logvar = 5.4 * torch.sigmoid(z[:, self.N: 3 * self.N].view((-1, self.N, 2))) - 9.2
-        extra = F.normalize(z[:, 3 * self.N:], dim=-1)
+        if self.normalize_extra:
+            extra = F.normalize(z[:, 3 * self.N:], dim=-1)
+        else:
+            extra = z[:, 3 * self.N:]
 
         return mean, logvar, extra
 
