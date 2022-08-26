@@ -1,6 +1,4 @@
 import argparse
-import torch
-import torch.nn.functional as F
 
 
 def get_args():
@@ -16,7 +14,7 @@ def get_args():
 
     # Dataset
     parser.add_argument('--dataset', default='multi-sprites', type=str, help="Dataset")
-    parser.add_argument('--dataset_name', default='4', type=str, help="Dataset name")
+    parser.add_argument('--dataset_name', nargs="+", default=['4'], type=str, help="Dataset name")
     parser.add_argument('--batch-size', type=int, default=16, help="Batch size")
 
     parser.add_argument('--model-name', required=True, type=str, help="Name of model")
@@ -36,6 +34,9 @@ def get_args():
 
 
     parser.add_argument('--use-comet', default=False, action='store_true')
+
+    # Model
+    parser.add_argument('--identity-loss', default="infonce", type=str, help="Loss to be used for identity representation")
 
 
     return parser
