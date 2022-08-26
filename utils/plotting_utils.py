@@ -7,6 +7,9 @@ from typing import Optional
 save_folder = "./visualizations"
 os.makedirs(save_folder, exist_ok=True)
 
+AVAILABLE_TAB_COLORS = ["tab:blue", "tab:orange", "tab:green", "tab:red", "tab:purple", "tab:brown", "tab:pink",
+                        "tab:gray", "tab:olive", "tab:cyan"]
+
 
 def plot_extra_dims(extra_dims, color_labels: Optional = None):
     """
@@ -39,21 +42,38 @@ def add_image_to_ax(image, ax, title=None):
     return ax
 
 
-def add_distribution_to_ax(mean, std, ax, n: int, title=None, color="black"):
+def add_distribution_to_ax(mean, std, ax, n: int, title=None, color=None):
+    if color is None:
+        colors = AVAILABLE_TAB_COLORS
+    else:
+        colors = [color] * n
     ax.set_aspect('equal', adjustable='box')
-    ax.set_xlim(-1, 1)
-    ax.set_ylim(-1, 1)
+    ax.set_xlim(-1.2, 1.2)
+    ax.set_ylim(-1.2, 1.2)
     if title is not None:
         ax.set_title(title)
     for j in range(n):
-        ellipse_j = Ellipse(xy=(mean[j, 0], mean[j, 1]), width=std[j, 0], height=std[j, 1], color=color,
+        ellipse_j = Ellipse(xy=(mean[j, 0], mean[j, 1]), width=std[j, 0], height=std[j, 1], color=colors[j],
                             linewidth=15, alpha=0.8)
         ax.add_artist(ellipse_j)
+    circle = Ellipse(xy=(0, 0), width=2, height=2, color="k",
+                     linewidth=1, alpha=0.7, fill=False)
+    ax.add_artist(circle)
+    return ax
+
+
+def add_scatter_to_ax(mean, ax, color=None):
+    if color is None:
+        colors = AVAILABLE_TAB_COLORS
+    else:
+        colors = [color] * len(mean)
+    for j in range(len(mean)):
+        ax.scatter(mean[j, 0], mean[j, 1], marker="*", s=120, c=colors[j])
     return ax
 
 
 def plot_images_distributions(mean, std, mean_next, std_next, image,
-                              image_next, n):
+                              image_next, expected_mean, n):
     fig, axes = plt.subplots(2, 2, figsize=(10, 10))
 
     # Plot first image
@@ -67,6 +87,7 @@ def plot_images_distributions(mean, std, mean_next, std_next, image,
 
     # Plot encoded distribution for second image
     add_distribution_to_ax(mean_next, std_next, axes[1, 1], n, title='after rotation')
+    add_scatter_to_ax(expected_mean, axes[1, 1])
 
     return fig, axes
 
@@ -77,7 +98,7 @@ def plot_embeddings_eval(mean_values, std_values, n, stabilizers):
     # Plot encoded distribution for first image
     for num_mean, mean in enumerate(mean_values):
         color_ratio = num_mean % (len(mean_values) / stabilizers[num_mean]) / (len(mean_values) / stabilizers[num_mean])
-        add_distribution_to_ax(mean, std_values[num_mean], ax, n, title='before rotation', color=cmap(color_ratio))
+        add_distribution_to_ax(mean, std_values[num_mean], ax, n, color=cmap(color_ratio))
     cax = fig.add_axes([0.27, 0.5, 0.5, 0.05])
 
     fig.colorbar(mpl.cm.ScalarMappable(cmap=cmap),

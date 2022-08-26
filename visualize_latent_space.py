@@ -2,6 +2,7 @@ import argparse
 import pickle
 
 import matplotlib.pyplot as plt
+import numpy as np
 import torch.utils.data
 from matplotlib.patches import Ellipse
 from torch import load
@@ -30,10 +31,10 @@ args = pickle.load(open(meta_file, 'rb'))['args']
 
 print(args)
 if args.dataset == 'rot-square':
-    dset = EquivDataset(f'{args.data_dir}/square/', dataset_name=args.dataset_name)
+    dset = EquivDataset(f'{args.data_dir}/square/', list_dataset_names=args.dataset_name)
 elif args.dataset == 'rot-arrows':
-    dset = EquivDatasetStabs(f'{args.data_dir}/arrows/', dataset_name=args.dataset_name)
-    dset_eval = EvalDataset(f'{args.data_dir}/arrows/', dataset_name=args.dataset_name)
+    dset = EquivDatasetStabs(f'{args.data_dir}/arrows/', list_dataset_names=args.dataset_name)
+    dset_eval = EvalDataset(f'{args.data_dir}/arrows/', list_dataset_names=args.dataset_name)
     eval_images = torch.FloatTensor(dset_eval.data.reshape(-1, *dset_eval.data.shape[-3:]))
     stabilizers = dset_eval.stabs.reshape((-1))
 else:
@@ -90,13 +91,19 @@ if fig:
 
 for i in range(10):
     print(f"Plotting example {i}")
-    fig, axes = plot_images_distributions(mean[i], std[i], mean_next[i], std_next[i], npimages[i], npimages_next[i], N)
+    fig, axes = plot_images_distributions(mean[i], std[i], mean_next[i], std_next[i], npimages[i], npimages_next[i], mean_rot[i], N)
     fig.savefig(os.path.join(save_folder, f"test_{i}.png"), bbox_inches='tight')
     plt.close("all")
 
 for num_unique, unique in enumerate(np.unique(stabilizers)):
     boolean_selection = (stabilizers == unique)
-    fig, axes = plot_embeddings_eval(mean_eval[boolean_selection], std_eval[boolean_selection], N, stabilizers[boolean_selection])
+    if args.dataset_name[0].endswith("m"):
+        print("Plotting stabilizers equal to 1")
+        fig, axes = plot_embeddings_eval(mean_eval[boolean_selection], std_eval[boolean_selection], N,
+                                         np.ones_like(stabilizers[boolean_selection]))
+    else:
+        fig, axes = plot_embeddings_eval(mean_eval[boolean_selection], std_eval[boolean_selection], N, stabilizers[boolean_selection])
+    axes.set_title(f"Target stabilizers = {unique}")
     fig.savefig(os.path.join(save_folder, f"{unique}_eval_embeddings.png"), bbox_inches='tight')
 
 

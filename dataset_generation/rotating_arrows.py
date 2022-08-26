@@ -5,14 +5,16 @@ import matplotlib.patches as mpatches
 from skimage.transform import resize
 from typing import Tuple, Optional, List
 
+AVAILABLE_TAB_COLORS = ["tab:red", "tab:green", "tab:purple","tab:orange", "tab:blue",   "tab:brown", "tab:pink",
+                        "tab:gray", "tab:olive", "tab:cyan"]
+
 
 class ArrowCanvas:
-    def __init__(self, num_arrows: int, color: str, style: str, resolution: Tuple[int] = (64, 64), radius: float = 1.0):
+    def __init__(self, num_arrows: int, style: str, resolution: Tuple[int] = (64, 64), radius: float = 1.0):
 
         self.num_arrows = num_arrows
         self.style = style
         self.radius = radius
-        self.color = color
         self.resolution = resolution
         self.fig, self.ax = self._set_figax()
 
@@ -87,31 +89,36 @@ class ArrowCanvas:
             raise ValueError("Invalid arrow style, valid options are 'simple', 'fancy', 'wedge', 'fork', 'triangle'")
         return params
 
-    def _add_arrow(self, arrow_angle):
+    def _add_arrow(self, arrow_angle, color):
         arrow = mpatches.FancyArrowPatch((0, 0), (self.radius * np.cos(arrow_angle), self.radius * np.sin(arrow_angle)),
-                                         edgecolor=self.color, facecolor=self.color,
+                                         edgecolor=color, facecolor=color,
                                          mutation_scale=self._mutation_scale,
                                          shrinkA=0,
                                          **self.arrow_params)
         self.ax.add_patch(arrow)
 
-    def add_arrows(self, rotation_rad):
+    def add_arrows(self, rotation_rad, color=AVAILABLE_TAB_COLORS[0]):
         for arrow_angle in self._arrow_angles:
-            self._add_arrow(arrow_angle + rotation_rad)
+            self._add_arrow(arrow_angle + rotation_rad, color)
+
+    def add_multicolor_arrows(self, rotation_rad, colors=None):
+        if colors is None:
+            colors = AVAILABLE_TAB_COLORS
+        assert len(colors) >= len(
+            self._arrow_angles), f"Total colors {len(colors)} provided is not enough for {len(self._arrow_angles)} " \
+                                 f"arrows "
+        for num_arrow, arrow_angle in enumerate(self._arrow_angles):
+            self._add_arrow(arrow_angle + rotation_rad, colors[num_arrow])
 
     @staticmethod
     def show():
         plt.show()
 
 
-num_arrows_list = [3, 4]
-dataset_folder = "../data/arrows"
-
-
 def generate_training_data(num_arrows_list, dataset_folder, dataset_name, style_list: Optional[List[str]] = None,
                            color_list: Optional[List[str]] = None, radius_list: Optional[List[float]] = None,
                            examples_per_num_arrows: int = 100,
-                           resolution=(64, 64)):
+                           resolution=(64, 64), multicolor=False):
     equiv_data = []
     equiv_lbls = []
     equiv_stabilizers = []
@@ -129,17 +136,81 @@ def generate_training_data(num_arrows_list, dataset_folder, dataset_name, style_
                 for radius in radius_list:
                     for num_example in range(examples_per_num_arrows):
                         print(
-                            "Generating image with num arrows {}, style {}, color {}, radius {}, num example {}".format(
-                                num_arrows, style, color, radius, num_example))
-                        c1 = ArrowCanvas(num_arrows=num_arrows, color=color, style=style, radius=radius,
+                            "Generating image with num arrows {}, style {}, color {}, radius {}, multicolor {}, num example {}".format(
+                                num_arrows, style, color, radius, multicolor, num_example))
+                        c1 = ArrowCanvas(num_arrows=num_arrows, style=style, radius=radius,
                                          resolution=resolution)
-                        c2 = ArrowCanvas(num_arrows=num_arrows, color=color, style=style, radius=radius,
+                        c2 = ArrowCanvas(num_arrows=num_arrows, style=style, radius=radius,
                                          resolution=resolution)
                         angle1 = 2 * np.pi * np.random.random()
                         angle2 = 2 * np.pi * np.random.random()
 
-                        c1.add_arrows(rotation_rad=angle1)
-                        c2.add_arrows(rotation_rad=angle2)
+                        if multicolor:
+                            assert len(
+                                color_list) == 1, "When plotting multicolor arrows don't provide a color_list of " \
+                                                  "length higher than 1 to avoid unnecesary data creation"
+                            c1.add_multicolor_arrows(rotation_rad=angle1)
+                            c2.add_multicolor_arrows(rotation_rad=angle2)
+                        else:
+                            c1.add_arrows(rotation_rad=angle1, color=color)
+                            c2.add_arrows(rotation_rad=angle2, color=color)
+
+                        img1 = c1.numpy_torch_img
+                        img2 = c2.numpy_torch_img
+                        angle = angle2 - angle1
+
+                        equiv_data.append([img1, img2])
+                        equiv_lbls.append(angle)
+                        equiv_stabilizers.append(num_arrows)
+                        plt.close("all")
+    equiv_data = np.array(equiv_data)
+    equiv_lbls = np.array(equiv_lbls)
+    equiv_stabilizers = np.array(equiv_stabilizers)
+
+    np.save(os.path.join(dataset_folder, dataset_name + '_data.npy'), equiv_data)
+    np.save(os.path.join(dataset_folder, dataset_name + '_lbls.npy'), equiv_lbls)
+    np.save(os.path.join(dataset_folder, dataset_name + '_stabilizers.npy'), equiv_stabilizers)
+
+
+def generate_training_data_png(num_arrows_list, dataset_folder, dataset_name, style_list: Optional[List[str]] = None,
+                               color_list: Optional[List[str]] = None, radius_list: Optional[List[float]] = None,
+                               num_angles: int = 36,
+                               resolution=(64, 64), multicolor=False):
+    equiv_data = []
+    equiv_lbls = []
+    equiv_stabilizers = []
+    if not os.path.exists(dataset_folder):
+        os.makedirs(dataset_folder)
+    if style_list is None:
+        style_list = ["simple", "fancy", "wedge", "fork", "triangle"]
+    if color_list is None:
+        color_list = ["tab:blue", "tab:orange", "tab:green", "tab:red", "tab:purple"]
+    if radius_list is None:
+        radius_list = [1.0]
+    for num_arrows in num_arrows_list:
+        for style in style_list:
+            for color in color_list:
+                for radius in radius_list:
+                    for num_example in range(examples_per_num_arrows):
+                        print(
+                            "Generating image with num arrows {}, style {}, color {}, radius {}, multicolor {}, num example {}".format(
+                                num_arrows, style, color, radius, multicolor, num_example))
+                        c1 = ArrowCanvas(num_arrows=num_arrows, style=style, radius=radius,
+                                         resolution=resolution)
+                        c2 = ArrowCanvas(num_arrows=num_arrows, style=style, radius=radius,
+                                         resolution=resolution)
+                        angle1 = np.pi * np.random.random()
+                        angle2 = np.pi * np.random.random()
+
+                        if multicolor:
+                            assert len(
+                                color_list) == 1, "When plotting multicolor arrows don't provide a color_list of " \
+                                                  "length higher than 1 to avoid unnecesary data creation"
+                            c1.add_multicolor_arrows(rotation_rad=angle1)
+                            c2.add_multicolor_arrows(rotation_rad=angle2)
+                        else:
+                            c1.add_arrows(rotation_rad=angle1, color=color)
+                            c2.add_arrows(rotation_rad=angle2, color=color)
 
                         img1 = c1.numpy_torch_img
                         img2 = c2.numpy_torch_img
@@ -161,7 +232,7 @@ def generate_training_data(num_arrows_list, dataset_folder, dataset_name, style_
 def generate_eval_data(num_arrows_list, dataset_folder, dataset_name, style_list: Optional[List[str]] = None,
                        color_list: Optional[List[str]] = None, radius_list: Optional[List[float]] = None,
                        total_rotations: int = 36,
-                       resolution=(64, 64)):
+                       resolution=(64, 64), multicolor=False):
     if not os.path.exists(dataset_folder):
         os.makedirs(dataset_folder)
     if style_list is None:
@@ -181,9 +252,15 @@ def generate_eval_data(num_arrows_list, dataset_folder, dataset_name, style_list
                     images_per_object = []
                     for num_angle, angle in enumerate(2 * np.pi * np.linspace(0, 1, total_rotations)):
                         print(num_arrows, num_angle)
-                        c = ArrowCanvas(num_arrows=num_arrows, color=color, style=style, radius=radius,
+                        c = ArrowCanvas(num_arrows=num_arrows, style=style, radius=radius,
                                         resolution=resolution)
-                        c.add_arrows(rotation_rad=angle)
+                        if multicolor:
+                            assert len(
+                                color_list) == 1, "When plotting multicolor arrows don't provide a color_list of " \
+                                                  "length higher than 1 to avoid unnecesary data creation"
+                            c.add_multicolor_arrows(rotation_rad=angle)
+                        else:
+                            c.add_arrows(rotation_rad=angle, color=color)
                         img = c.numpy_torch_img
                         images_per_object.append(img)
                         plt.close("all")
