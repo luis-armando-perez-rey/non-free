@@ -33,8 +33,8 @@ def prob_loss(mean1, var1, mean2, var2, N):
     comp2 = D.Independent(D.Normal(mean2, torch.exp(var2)), 1)
     gmm2 = D.MixtureSameFamily(mix2, comp2)
 
-    sample1 = gmm1.sample((100,))
-    sample2 = gmm1.sample((100,))
+    sample1 = gmm1.sample((20,))
+    sample2 = gmm1.sample((20,))
 
     return -gmm2.log_prob(sample1).sum(0).mean() - gmm1.log_prob(sample2).sum(0).mean()
 
