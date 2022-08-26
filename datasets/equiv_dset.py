@@ -2,12 +2,19 @@ import torch
 from torch.utils.data import DataLoader
 import numpy as np
 import os
+from typing import List
 
 
 class EquivDataset(torch.utils.data.Dataset):
-    def __init__(self, path: str, dataset_name: str = "equiv", greyscale: bool = False):
-        self.data = np.load(path + dataset_name + '_data.npy', mmap_mode='r+')
-        self.lbls = np.load(path + dataset_name + '_lbls.npy', mmap_mode='r+')
+    def __init__(self, path: str, list_dataset_names: List[str] = ["equiv"], greyscale: bool = False):
+        print(f"Loading the datasets {list_dataset_names}")
+        self.data = np.load(path + list_dataset_names[0] + '_data.npy', mmap_mode='r+')
+        self.lbls = np.load(path + list_dataset_names[0] + '_lbls.npy', mmap_mode='r+')
+        for dataset_name in list_dataset_names[1:]:
+            self.data = np.concatenate([self.data, np.load(path + dataset_name + '_data.npy', mmap_mode='r+')],
+                                       axis=0)
+            self.lbls = np.concatenate([self.lbls, np.load(path + dataset_name + '_lbls.npy', mmap_mode='r+')],
+                                       axis=0)
         self.greyscale = greyscale
 
     def __getitem__(self, index):
@@ -28,11 +35,15 @@ class EquivDatasetStabs(EquivDataset):
     stabilizers corresponding to the image pair.
     """
 
-    def __init__(self, path: str, dataset_name: str = "equiv", greyscale: bool = False):
-        super().__init__(path, dataset_name, greyscale)
+    def __init__(self, path: str, list_dataset_names: List[str] = ["equiv"], greyscale: bool = False):
+        super().__init__(path, list_dataset_names, greyscale)
         assert os.path.exists(
-            path + dataset_name + '_stabilizers.npy'), f"{dataset_name}_stabilizers.npy cardinality file not found"
-        self.stabs = np.load(path + dataset_name + '_stabilizers.npy', mmap_mode='r+')
+            path + list_dataset_names[
+                0] + '_stabilizers.npy'), f"{list_dataset_names[0]}_stabilizers.npy cardinality file not found"
+        self.stabs = np.load(path + list_dataset_names[0] + '_stabilizers.npy', mmap_mode='r+')
+        for dataset_name in list_dataset_names[1:]:
+            self.stack = np.concatenate([self.stabs, np.load(path + dataset_name + '_stabilizers.npy', mmap_mode='r+')],
+                                        axis=0)
 
     def __getitem__(self, index):
         if self.greyscale:
@@ -46,6 +57,12 @@ class EquivDatasetStabs(EquivDataset):
 
 
 class EvalDataset(torch.utils.data.Dataset):
-    def __init__(self, path: str, dataset_name: str):
-        self.data = np.load(path + dataset_name + '_eval_data.npy', mmap_mode='r+')
-        self.stabs = np.load(path + dataset_name + '_eval_stabilizers.npy', mmap_mode='r+')
+    def __init__(self, path: str, list_dataset_names: List[str]):
+        self.data = np.load(path + list_dataset_names[0] + '_eval_data.npy', mmap_mode='r+')
+        self.stabs = np.load(path + list_dataset_names[0] + '_eval_stabilizers.npy', mmap_mode='r+')
+        for dataset_name in list_dataset_names[1:]:
+            self.data = np.concatenate([self.data, np.load(path + dataset_name + '_eval_data.npy', mmap_mode='r+')],
+                                       axis=0)
+            self.stabs = np.concatenate([self.stabs, np.load(path + dataset_name + '_eval_stabilizers.npy', mmap_mode='r+')],
+                                       axis=0)
+
