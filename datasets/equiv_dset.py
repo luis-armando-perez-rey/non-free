@@ -37,12 +37,13 @@ class EquivDatasetStabs(EquivDataset):
 
     def __init__(self, path: str, list_dataset_names: List[str] = ["equiv"], greyscale: bool = False):
         super().__init__(path, list_dataset_names, greyscale)
-        assert os.path.exists(
-            path + list_dataset_names[
-                0] + '_stabilizers.npy'), f"{list_dataset_names[0]}_stabilizers.npy cardinality file not found"
+        for dataset_name in list_dataset_names:
+            assert os.path.exists(
+                path + dataset_name[
+                    0] + '_stabilizers.npy'), f"{dataset_name}_stabilizers.npy cardinality file not found"
         self.stabs = np.load(path + list_dataset_names[0] + '_stabilizers.npy', mmap_mode='r+')
         for dataset_name in list_dataset_names[1:]:
-            self.stack = np.concatenate([self.stabs, np.load(path + dataset_name + '_stabilizers.npy', mmap_mode='r+')],
+            self.stabs = np.concatenate([self.stabs, np.load(path + dataset_name + '_stabilizers.npy', mmap_mode='r+')],
                                         axis=0)
 
     def __getitem__(self, index):
