@@ -27,6 +27,7 @@ def get_args():
     parser.add_argument('--checkpoints-dir', default='checkpoints', type=str)
 
     # Optimization
+    parser.add_argument('--optimizer', default="adam", help="Optimizer used")
     parser.add_argument('--lr-scheduler', action='store_true', default=False, help="Use a lr scheduler")
     parser.add_argument('--lr', default=1e-3, type=float)
 
@@ -37,6 +38,9 @@ def get_args():
 
     # Model
     parser.add_argument('--identity-loss', default="infonce", type=str, help="Loss to be used for identity representation")
+
+    # Plotting
+    parser.add_argument("--plot", default=0, type=int, help="Number of epochs to ")
 
 
     return parser

@@ -21,6 +21,8 @@ from models.models_nn import *
 from utils.nn_utils import *
 import torch.utils.data
 from torch import save
+from utils.plotting_utils import plot_embeddings_eval
+import matplotlib.pyplot as plt
 
 torch.cuda.empty_cache()
 
@@ -40,13 +42,19 @@ make_dir(MODEL_PATH)
 make_dir(figures_dir)
 
 pickle.dump({'args': args}, open(meta_file, 'wb'))
-
+print(args)
 # Set dataset
 print(f"Loading dataset {args.dataset} with dataset name {args.dataset_name}")
 if args.dataset == 'rot-square':
     dset = EquivDataset(f'{args.data_dir}/square/', list_dataset_names=args.dataset_name)
 elif args.dataset == 'rot-arrows':
     dset = EquivDataset(f'{args.data_dir}/arrows/', list_dataset_names=args.dataset_name)
+elif args.dataset == 'sinusoidal':
+    dset = EquivDataset(f'{args.data_dir}/sinusoidal/', list_dataset_names=args.dataset_name)
+    dset_eval = EvalDataset(f'{args.data_dir}/sinusoidal/', list_dataset_names=args.dataset_name)
+    eval_images = torch.FloatTensor(dset_eval.data.reshape(-1, dset_eval.data.shape[-1]))
+    stabilizers = dset_eval.stabs.reshape((-1))
+
 else:
     raise ValueError(f'Dataset {args.dataset} not supported')
 
@@ -62,14 +70,18 @@ print("# test set:", len(dset_test))
 # Sample data
 img, _, acn = next(iter(train_loader))
 img_shape = img.shape[1:]
-
 N = args.num  # number of Gaussians for the mixture model
 extra_dim = args.extra_dim  # the invariant component
 
-if args.model == 'cnn':
-    model = MDN(img_shape[0], 2, N, extra_dim, normalize_extra=True).to(device)
+print("Using model", args.model)
+model = MDN(img_shape[0], 2, N, extra_dim, model=args.model, normalize_extra=True).to(device)
+if args.optimizer == "adam":
+    optimizer = optim.Adam(model.parameters(), lr=args.lr)
+elif args.optimizer == "adamw":
+    optimizer = optim.AdamW(model.parameters(), lr=args.lr)
+else:
+    ValueError(f"Optimizer {args.optimizer} not defined")
 
-optimizer = optim.Adam(model.parameters(), lr=args.lr)
 errors = []
 
 
@@ -107,12 +119,16 @@ def train(epoch, data_loader, mode='train'):
         rot = make_rotation_matrix(action)
 
         # The predicted z_mean after applying the rotation corresponding to the action
+        # z_mean_pred = (rot @ z_mean.unsqueeze(-1)).squeeze(-1)  # Beware the detach!!!
         z_mean_pred = (rot @ z_mean.unsqueeze(-1).detach()).squeeze(-1)  # Beware the detach!!!
 
-        #Probabilistic losses (cross-entropy, Chamfer etc)
-        #loss_equiv = prob_loss(z_mean_next, z_logvar_next, z_mean_pred, z_logvar, N)
-        #loss_equiv = prob_loss(z_mean_pred, z_logvar, z_mean_next, z_logvar_next, N)
-        loss_equiv = ((z_mean_pred.unsqueeze(1) - z_mean_next.unsqueeze(2))**2).sum(-1).min(dim=-1)[0].sum(dim=-1).mean() #Chamfer/Hausdorff loss
+        # Probabilistic losses (cross-entropy, Chamfer etc)
+        # loss_equiv = prob_loss(z_mean_next, z_logvar_next, z_mean_pred, z_logvar, N)
+        # loss_equiv = prob_loss(z_mean_pred, z_logvar, z_mean_next, z_logvar_next, N)
+        loss_equiv = ((z_mean_pred.unsqueeze(1) - z_mean_next.unsqueeze(2)) ** 2).sum(-1).min(dim=-1)[0].sum(
+            dim=-1).mean()  # Chamfer/Hausdorff loss
+
+        # loss_equiv = ((z_mean_pred - z_mean_next)**2).sum(-1).mean()
 
         if extra_dim > 0:
             if args.identity_loss == "infonce":
@@ -123,6 +139,8 @@ def train(epoch, data_loader, mode='train'):
                     (extra * extra_next).sum(-1) / args.tau - torch.logsumexp(distance_matrix, dim=-1))
             elif args.identity_loss == "euclidean":
                 loss_contra = 1000.0 * torch.mean(torch.sum((extra - extra_next) ** 2, dim=-1))
+            else:
+                loss_contra = 0.0
 
             loss = loss_equiv + loss_contra
 
@@ -135,7 +153,9 @@ def train(epoch, data_loader, mode='train'):
             if args.use_comet:
                 experiment.log_metric("batch_loss_equiv", loss_equiv.cpu().numpy())
 
-        print(f"{mode.upper()} Epoch: {epoch}, Batch: {batch_idx} of {len(data_loader)} Loss: {loss:.3}")
+        print(
+            f"{mode.upper()} Epoch: {epoch}, Batch: {batch_idx} of {len(data_loader)} Loss: {loss:.3} Loss equiv:"
+            f" {loss_equiv:.3}")
 
         mu_loss += loss.item()
 
@@ -153,6 +173,26 @@ def train(epoch, data_loader, mode='train'):
 
         if (epoch % args.save_interval) == 0:
             save(model, model_file)
+        if (args.plot > 0) & ((epoch % (args.plot+1)) == 0):
+            mean_eval, logvar_eval, extra_eval = model(eval_images.to(device))
+            logvar_eval = -4.6 * torch.ones(logvar_eval.shape).to(logvar_eval.device)
+            std_eval = np.exp(logvar_eval.detach().cpu().numpy() / 2.) / 10
+            for num_unique, unique in enumerate(np.unique(stabilizers)):
+                boolean_selection = (stabilizers == unique)
+                if args.dataset_name[0].endswith("m"):
+                    print("Plotting stabilizers equal to 1")
+                    fig, axes = plot_embeddings_eval(mean_eval[boolean_selection], std_eval[boolean_selection], N,
+                                                     np.ones_like(stabilizers[boolean_selection]))
+                    axes.set_xlim([-1.2, 1.2])
+                    axes.set_ylim([-1.2, 1.2])
+                else:
+                    fig, axes = plot_embeddings_eval(mean_eval[boolean_selection], std_eval[boolean_selection], N,
+                                                     stabilizers[boolean_selection])
+                    axes.set_xlim([-1.2, 1.2])
+                    axes.set_ylim([-1.2, 1.2])
+                axes.set_title(f"Target stabilizers = {unique}")
+                fig.savefig(os.path.join(os.path.join(MODEL_PATH, "figures"), f"{unique}_{epoch}.png"), bbox_inches='tight')
+                plt.close(fig)
 
 
 if __name__ == "__main__":
