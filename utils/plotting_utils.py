@@ -26,35 +26,36 @@ def plot_extra_dims(extra_dims, color_labels: Optional = None):
         else:
             plt.scatter(extra_dims[:, 0], extra_dims[:, 1], c=color_labels)
     else:
-        print('Not enough extra dims, no scatter plot')
+        print(f'Not enough extra dims {extra_dims}, no scatter plot')
         fig = None
         ax = None
     return fig, ax
 
 
-def add_image_to_ax(image, ax, title=None):
-    ax.set_aspect('equal', adjustable='box')
-    ax.set_xlim([0, 1])
-    ax.set_ylim([0, 1])
+def add_image_to_ax(data, ax, title=None):
+    if len(data.shape) == 1:
+        ax.plot(range(len(data)), data)
+    else:
+        ax.set_aspect('equal', adjustable='box')
+        ax.imshow(data, interpolation='nearest', extent=(0, 1, 0, 1))
     if title is not None:
         ax.set_title(title)
-    ax.imshow(image, interpolation='nearest', extent=(0, 1, 0, 1))
     return ax
 
 
-def add_distribution_to_ax(mean, std, ax, n: int, title=None, color=None):
+def add_distribution_to_ax(mean, std, ax, n: int, title=None, color=None, dist_text=None):
     if color is None:
         colors = AVAILABLE_TAB_COLORS
     else:
         colors = [color] * n
     ax.set_aspect('equal', adjustable='box')
-    ax.set_xlim(-1.2, 1.2)
-    ax.set_ylim(-1.2, 1.2)
     if title is not None:
         ax.set_title(title)
     for j in range(n):
         ellipse_j = Ellipse(xy=(mean[j, 0], mean[j, 1]), width=std[j, 0], height=std[j, 1], color=colors[j],
                             linewidth=15, alpha=0.8)
+        if dist_text is not None:
+            ax.text(mean[j, 0], mean[j, 1], dist_text, color="k", fontsize=12)
         ax.add_artist(ellipse_j)
     circle = Ellipse(xy=(0, 0), width=2, height=2, color="k",
                      linewidth=1, alpha=0.7, fill=False)
@@ -84,23 +85,41 @@ def plot_images_distributions(mean, std, mean_next, std_next, image,
 
     # Plot encoded distribution for first image
     add_distribution_to_ax(mean, std, axes[1, 0], n, title='before rotation')
+    axes[1, 0].set_xlim(-1.2, 1.2)
+    axes[1, 0].set_ylim(-1.2, 1.2)
 
     # Plot encoded distribution for second image
     add_distribution_to_ax(mean_next, std_next, axes[1, 1], n, title='after rotation')
+    axes[1, 1].set_xlim(-1.2, 1.2)
+    axes[1, 1].set_ylim(-1.2, 1.2)
     add_scatter_to_ax(expected_mean, axes[1, 1])
 
     return fig, axes
 
 
-def plot_embeddings_eval(mean_values, std_values, n, stabilizers):
+def plot_embeddings_eval(mean_values, std_values, n, stabilizers, increasing_radius=False):
     fig, ax = plt.subplots(1, 1, figsize=(10, 10))
     cmap = mpl.cm.get_cmap('Reds')
     # Plot encoded distribution for first image
+
     for num_mean, mean in enumerate(mean_values):
         color_ratio = num_mean % (len(mean_values) / stabilizers[num_mean]) / (len(mean_values) / stabilizers[num_mean])
-        add_distribution_to_ax(mean, std_values[num_mean], ax, n, color=cmap(color_ratio))
+        if increasing_radius:
+            radius = 1.0 + color_ratio
+        else:
+            radius = 1.0
+        add_distribution_to_ax(radius * mean, std_values[num_mean], ax, n, color=cmap(color_ratio),
+                               dist_text=str(num_mean))
     cax = fig.add_axes([0.27, 0.5, 0.5, 0.05])
 
     fig.colorbar(mpl.cm.ScalarMappable(cmap=cmap),
                  cax=cax, orientation='horizontal')
     return fig, ax
+
+
+def plot_eval_images(eval_images, n_rows):
+    assert len(eval_images) % n_rows == 0
+    fig, axes = plt.subplots(n_rows, int(len(eval_images) / n_rows), figsize=(10, 10))
+    for i in range(len(eval_images)):
+        add_image_to_ax(eval_images[i], axes[int(i / n_rows), i % n_rows])
+    return fig, axes
