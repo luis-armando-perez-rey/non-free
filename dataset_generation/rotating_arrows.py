@@ -114,14 +114,14 @@ dataset_folder = "../data/arrows"
 os.makedirs(dataset_folder, exist_ok=True)
 
 
-
+# num_arrows = 4
 for i in range(N):
     print(i)
     eps = np.random.rand()
     if eps < 0.5:
         num_arrows = 4 #np.random.randint(low=3, high=6)
     else:
-        num_arrows = 7
+        num_arrows = 5
     c1 = ArrowCanvas(num_arrows=num_arrows, color="tab:red", style="simple")
     c2 = ArrowCanvas(num_arrows=num_arrows, color="tab:red", style="simple")
     angle1 = 2*np.pi * np.random.random()

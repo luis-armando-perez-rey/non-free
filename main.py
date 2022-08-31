@@ -99,8 +99,8 @@ def train(epoch, data_loader, mode='train'):
 
         #Probabilistic losses (cross-entropy, Chamfer etc)
         #loss_equiv = prob_loss(z_mean_next, z_logvar_next, z_mean_pred, z_logvar, N)
-        #loss_equiv = prob_loss(z_mean_pred, z_logvar, z_mean_next, z_logvar_next, N)
-        loss_equiv = ((z_mean_pred.unsqueeze(1) - z_mean_next.unsqueeze(2))**2).sum(-1).min(dim=-1)[0].sum(dim=-1).mean() #Chamfer/Hausdorff loss
+        loss_equiv = prob_loss(z_mean_pred, z_logvar, z_mean_next, z_logvar_next, N)
+        #loss_equiv = ((z_mean_pred.unsqueeze(1) - z_mean_next.unsqueeze(2))**2).sum(-1).min(dim=-1)[0].sum(dim=-1).mean() #Chamfer/Hausdorff loss
 
         if extra_dim > 0:
             #Contrastive Loss: infoNCE w/ cosine similariy
