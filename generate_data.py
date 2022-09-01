@@ -1,6 +1,6 @@
 import argparse
 from dataset_generation.rotating_arrows import generate_training_data, generate_eval_data
-
+from dataset_generation.simple_sinusoidal import generate_dataset_sinusoidals, generate_dataset_regular_sinusoidals
 parser = argparse.ArgumentParser()
 # Dataset
 parser.add_argument('--dataset', default='rot-arrows', type=str, help="Dataset")
@@ -22,6 +22,14 @@ def generate_dataset(dataset):
             generation_parameters["multicolor"] = True
         generate_training_data(**generation_parameters, examples_per_num_arrows=args.n_examples)
         generate_eval_data(**generation_parameters)
+    elif dataset == 'sinusoidal':
+        generation_parameters = dict(omega_list=args.n_arrows,
+                                     dimension=100,
+                                     dataset_folder="./data/sinusoidal",
+                                     dataset_name=args.dataset_name
+                                     )
+        generate_dataset_sinusoidals(**generation_parameters, num_examples=args.n_examples)
+        generate_dataset_regular_sinusoidals(**generation_parameters, num_angles=36)
 
 
 if __name__ == "__main__":
