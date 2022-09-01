@@ -1,10 +1,17 @@
 #!/bin/sh
 identity_loss="infonce"
-dataset_name="1_m"
-N=1
+dataset_name="4 7"
+dataset="rot-arrows"
+N=7
 extra_dim=0
-experiment_id="1"
-epochs=200
-model_name="D$dataset_name-L$identity_loss-ED$extra_dim-N$N-ID$experiment_id"
-python3 main.py --model-name ${model_name} --checkpoints-dir "./saved_models" --model 'cnn' --dataset 'rot-arrows' --identity-loss ${identity_loss} --dataset_name ${dataset_name}  --num ${N} --extra-dim ${extra_dim} --batch-size 128 --epochs ${epochs} --data-dir ./data
+experiment_id="rep3"
+epochs=100
+optimizer="adamw"
+model="resnet"
+save_interval=1
+lr=1e-4
+batch_size=256
+equiv_loss="binary"
+model_name="D${dataset_name// /_}-L$identity_loss-ED$extra_dim-N$N-M$model-A$model-ID$experiment_id"
+python3 main.py --model ${model} --model-name ${model_name} --lr ${lr} --checkpoints-dir "./saved_models" --optimizer ${optimizer} --dataset ${dataset} --identity-loss ${identity_loss} --dataset_name ${dataset_name}  --num ${N} --extra-dim ${extra_dim} --batch-size ${batch_size} --epochs ${epochs} --data-dir ./data --save-interval ${save_interval} --plot 0 --equiv-loss ${equiv_loss}
 python3 visualize_latent_space.py --save-folder=${model_name} --dataset=rot-arrows --dataset_name ${dataset_name}
