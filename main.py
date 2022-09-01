@@ -63,7 +63,8 @@ extra_dim = args.extra_dim
 model = MDN(img_shape[0], 2, N, extra_dim, model=args.model).to(device)
 
 
-optimizer = optim.Adam(model.parameters(), lr=args.lr)
+# optimizer = optim.Adam(model.parameters(), lr=args.lr)
+optimizer = optim.AdamW(model.parameters(), lr=args.lr)
 errors = []
 
 def train(epoch, data_loader, mode='train'):
