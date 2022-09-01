@@ -32,12 +32,14 @@ def get_args():
     parser.add_argument('--lr', default=1e-3, type=float)
 
     parser.add_argument('--data-dir', default='data', type=str)
+    parser.add_argument('--equiv-loss', default="binary", type=str)
 
 
     parser.add_argument('--use-comet', default=False, action='store_true')
 
     # Model
     parser.add_argument('--identity-loss', default="infonce", type=str, help="Loss to be used for identity representation")
+    parser.add_argument('--autoencoder', default="None", type=str, help="Autoencoder model to use")
 
     # Plotting
     parser.add_argument("--plot", default=0, type=int, help="Number of epochs to ")

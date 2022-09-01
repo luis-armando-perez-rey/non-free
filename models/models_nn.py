@@ -1,4 +1,7 @@
+import torch
+
 from models.resnet import *
+from math import prod
 
 
 class View(nn.Module):
@@ -8,6 +11,21 @@ class View(nn.Module):
 
     def forward(self, tensor):
         return tensor.view(self.size)
+
+
+class Decoder(nn.Module):
+    def __init__(self, nc: int, latent_dim: int, extra_dim: int = 0, model: str = "cnn"):
+        super().__init__()
+        total_latent_dim = latent_dim + extra_dim
+        if model == "cnn1":
+            self.decoder = BaseDecoder1D(nc, total_latent_dim)
+        elif model == "dense":
+            self.decoder = BaseDenseDecoder(nc, total_latent_dim)
+        else:
+            ValueError(f"{model} not available for decoder")
+
+    def forward(self, x):
+        return self.decoder(x)
 
 
 class MDN(nn.Module):
@@ -20,12 +38,18 @@ class MDN(nn.Module):
         elif model == 'resnet':
             self.encoder = ResNet18Enc(z_dim=3 * n_gaussians, nc=nc)  # works only for latent_dim=2!
             self.encoder_extra = ResNet18Enc(z_dim=extra_dim, nc=nc)
+        elif model == "resnet1d":
+            self.encoder = ResNet1DEnc(z_dim=3 * n_gaussians, nc=nc)
+            self.encoder_extra = ResNet1DEnc(z_dim=extra_dim, nc=nc)
         elif model == "dense":
             self.encoder = BaseDenseEncoder(latent_dim=3 * n_gaussians, nc=nc)  # works only for latent_dim=2!
             self.encoder_extra = BaseDenseEncoder(latent_dim=extra_dim, nc=nc)
         elif model == "cnn1":
             self.encoder = BaseEncoder1D(latent_dim=3 * n_gaussians, nc=nc)
             self.encoder_extra = BaseEncoder1D(latent_dim=extra_dim, nc=nc)
+        elif model == "dislib1":
+            self.encoder = DisLibEncoder1D(latent_dim=3 * n_gaussians, nc=nc)
+            self.encoder_extra = DisLibEncoder1D(latent_dim=extra_dim, nc=nc)
         self.latent_dim = latent_dim
         self.normalize_extra = normalize_extra
         self.extra_dim = extra_dim
@@ -75,6 +99,38 @@ class BaseEncoder(nn.Module):
     def forward(self, x):
         return self.encoder(x)
 
+
+
+
+
+class DisLibEncoder1D(nn.Module):
+    def __init__(self, nc: int, latent_dim: int):
+        """
+        Based convolutional neural network encoder that takes images with nc channels and returns a latent vector of
+        latent_dim dimensions.
+        :param nc: number of input channels
+        :param latent_dim: output latent dimension
+        """
+        super().__init__()
+        self.encoder = nn.Sequential(
+            nn.Unflatten(1, (1, nc)),
+            nn.Conv1d(1, 16, kernel_size=4, stride=2, padding="valid"),
+            nn.ReLU(),
+            nn.Conv1d(16, 16, kernel_size=4, stride=2, padding="valid"),
+            nn.ReLU(),
+            nn.Conv1d(16, 32, kernel_size=4, stride=2, padding="valid"),
+            nn.ReLU(),
+            nn.Conv1d(32, 32, kernel_size=4, stride=2, padding="valid"),
+            nn.ReLU(),
+            nn.Flatten(),
+            nn.Linear(128, 128),
+            nn.ReLU(),
+            nn.Linear(128, latent_dim),
+        )
+
+    def forward(self, x):
+        return self.encoder(x)
+
 class BaseEncoder1D(nn.Module):
     def __init__(self, nc: int, latent_dim: int):
         """
@@ -91,14 +147,14 @@ class BaseEncoder1D(nn.Module):
             nn.Conv1d(16, 16, kernel_size=7, stride=1, padding="same"),
             nn.ReLU(),
             nn.MaxPool1d(kernel_size=2, stride=2),
-            nn.Conv1d(16, 32, kernel_size=3, stride=1, padding="valid"),
+            nn.Conv1d(16, 32, kernel_size=3, stride=1, padding="same"),
             nn.ReLU(),
-            nn.Conv1d(32, 32, kernel_size=3, stride=1, padding="valid"),
+            nn.Conv1d(32, 32, kernel_size=3, stride=1, padding="same"),
             nn.ReLU(),
             nn.MaxPool1d(kernel_size=2, stride=2),
             nn.Flatten(),
-            nn.BatchNorm1d(736),
-            nn.Linear(736, 100),
+            # nn.BatchNorm1d(640),
+            nn.Linear(800, 100),
             nn.BatchNorm1d(100),
             nn.ReLU(),
             nn.Linear(100, 50),
@@ -109,6 +165,54 @@ class BaseEncoder1D(nn.Module):
 
     def forward(self, x):
         return self.encoder(x)
+
+class BaseDecoder1D(nn.Module):
+    def __init__(self, nc: int, dim_latent_extra: int):
+        """
+        Based convolutional neural network encoder that takes images with nc channels and returns a latent vector of
+        latent_dim dimensions.
+        :param nc: number of input channels
+        :param latent_dim: output latent dimension
+        """
+        super().__init__()
+
+        activation_shape = (32, 2 * 25)
+        max_pool_size = prod(activation_shape)
+        self.encoder = nn.Sequential(
+            nn.Linear(dim_latent_extra, 50),
+            nn.ReLU(),
+            nn.Linear(50, 100),
+            nn.ReLU(),
+            nn.Linear(100, 800),
+            nn.ReLU(),
+            nn.Linear(800, max_pool_size),
+            nn.ReLU(),
+            nn.Unflatten(-1, activation_shape),
+            nn.Conv1d(32, 32, kernel_size=3, stride=1, padding = "same"),
+            nn.ReLU(),
+            nn.Conv1d(32, 16, kernel_size=3, stride=1, padding="same"),
+            nn.ReLU(),
+            nn.Upsample(scale_factor=2),
+            nn.Conv1d(16, 16, kernel_size=7, stride=1, padding="same"),
+            nn.ReLU(),
+            nn.Conv1d(16, 1, kernel_size=7, stride=1, padding="same"),
+            Squeeze(),
+            nn.Tanh(),
+            # nn.ConvTranspose1d(32, 32, kernel_size=3, stride=1, padding=0),
+            # nn.ReLU(),
+            # nn.ConvTranspose1d(32, 16, kernel_size=3, stride=1, padding=0),
+            # nn.ReLU(),
+            # nn.ConvTranspose1d(16, 16, kernel_size=7, stride=1, padding=0),
+            # nn.ReLU(),
+            # nn.ConvTranspose1d(16, 1, kernel_size=7, stride=1, padding=0)
+        )
+
+    def forward(self, x):
+        return self.encoder(x)
+
+class Squeeze(torch.nn.Module):
+    def forward(self, x):
+        return torch.squeeze(x)
 
 
 class BaseDenseEncoder(nn.Module):
@@ -130,16 +234,39 @@ class BaseDenseEncoder(nn.Module):
             nn.Linear(50, 25),
             nn.ReLU(True),
             nn.Linear(25, 10),
-            # nn.ReLU(True),
-            # nn.Linear(10, 10),
-            # nn.ReLU(True),
-            # nn.Linear(10, 10),
             nn.ReLU(True),
             nn.Linear(10, latent_dim),
         )
 
     def forward(self, x):
         return self.encoder(x)
+
+
+class BaseDenseDecoder(nn.Module):
+    def __init__(self, nc: int, dim_latent_extra: int):
+        """
+        Based convolutional neural network encoder that takes images with nc channels and returns a latent vector of
+        latent_dim dimensions.
+        :param nc: number of input channels
+        :param latent_dim: output latent dimension
+        """
+        super().__init__()
+        self.decoder = nn.Sequential(
+            nn.Linear(dim_latent_extra, 10),
+            nn.ReLU(),
+            nn.Linear(10, 25),
+            nn.ReLU(),
+            nn.Linear(25, 50),
+            nn.ReLU(),
+            nn.Linear(50, 75),
+            nn.ReLU(),
+            nn.Linear(75, 100),
+            nn.ReLU(),
+            nn.Linear(100, nc)
+        )
+
+    def forward(self, x):
+        return self.decoder(x)
 
 
 if __name__ == "__main__":
