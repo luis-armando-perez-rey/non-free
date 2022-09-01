@@ -1,11 +1,9 @@
 import os
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+import numpy as np
 from matplotlib.patches import Ellipse
 from typing import Optional
-
-save_folder = "./visualizations"
-os.makedirs(save_folder, exist_ok=True)
 
 AVAILABLE_TAB_COLORS = ["tab:blue", "tab:orange", "tab:green", "tab:red", "tab:purple", "tab:brown", "tab:pink",
                         "tab:gray", "tab:olive", "tab:cyan"]
@@ -123,3 +121,22 @@ def plot_eval_images(eval_images, n_rows):
     for i in range(len(eval_images)):
         add_image_to_ax(eval_images[i], axes[int(i / n_rows), i % n_rows])
     return fig, axes
+
+
+def save_embeddings_on_circle(mean, std, stabilizers, save_folder: str, dataset_name: str = ""):
+    n_gaussians = mean.shape[1]  # Assume mean has shape (total_data, num_gaussians, latent)
+    for num_unique, unique in enumerate(np.unique(stabilizers)):
+        boolean_selection = (stabilizers == unique)
+        if dataset_name.endswith("m"):
+            print("Plotting stabilizers equal to 1")
+            fig, axes = plot_embeddings_eval(mean[boolean_selection], std[boolean_selection], n_gaussians,
+                                             np.ones_like(stabilizers[boolean_selection]))
+            axes.set_xlim([-1.2, 1.2])
+            axes.set_ylim([-1.2, 1.2])
+        else:
+            fig, axes = plot_embeddings_eval(mean[boolean_selection], std[boolean_selection], n_gaussians,
+                                             stabilizers[boolean_selection])
+            axes.set_xlim([-1.2, 1.2])
+            axes.set_ylim([-1.2, 1.2])
+        axes.set_title(f"Target stabilizers = {unique}")
+        fig.savefig(os.path.join(save_folder, f"{unique}_eval_embeddings.png"), bbox_inches='tight')

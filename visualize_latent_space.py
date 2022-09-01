@@ -2,9 +2,7 @@ import argparse
 import pickle
 
 import matplotlib.pyplot as plt
-import numpy as np
 import torch.utils.data
-from matplotlib.patches import Ellipse
 from torch import load
 
 # Import datasets
@@ -12,7 +10,8 @@ from datasets.equiv_dset import *
 from utils.nn_utils import *
 
 # Import plotting utils
-from utils.plotting_utils import plot_extra_dims, plot_images_distributions, plot_embeddings_eval, plot_eval_images
+from utils.plotting_utils import plot_extra_dims, plot_images_distributions, plot_embeddings_eval, \
+    save_embeddings_on_circle
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--save-folder', type=str, default='checkpoints', help='Path to saved model')
@@ -32,6 +31,8 @@ args = pickle.load(open(meta_file, 'rb'))['args']
 print(args)
 if args.dataset == 'rot-square':
     dset = EquivDataset(f'{args.data_dir}/square/', list_dataset_names=args.dataset_name)
+    stabilizers = None
+    eval_images = None
 elif args.dataset == 'rot-arrows':
     dset = EquivDatasetStabs(f'{args.data_dir}/arrows/', list_dataset_names=args.dataset_name)
     dset_eval = EvalDataset(f'{args.data_dir}/arrows/', list_dataset_names=args.dataset_name)
@@ -42,8 +43,9 @@ elif args.dataset == "sinusoidal":
     dset_eval = EvalDataset(f'{args.data_dir}/sinusoidal/', list_dataset_names=args.dataset_name)
     eval_images = torch.FloatTensor(dset_eval.data.reshape(-1, dset_eval.data.shape[-1]))
     stabilizers = dset_eval.stabs.reshape((-1))
-
 else:
+    eval_images = None
+    stabilizers = None
     raise ValueError(f'Dataset {args.dataset} not supported')
 
 train_loader = torch.utils.data.DataLoader(dset,
@@ -55,19 +57,20 @@ model.eval()
 if args.dataset == "rot-arrows":
     img, img_next, action, n_stabilizers = next(iter(train_loader))
     mean_eval, logvar_eval, extra_eval = model(eval_images.to(device))
-    logvar_eval = -4.6 * torch.ones(logvar_eval.shape).to(logvar_eval.device)
-    std_eval = np.exp(logvar_eval.detach().cpu().numpy() / 2.) / 10
 elif args.dataset == "sinusoidal":
     img, img_next, action, n_stabilizers = next(iter(train_loader))
     mean_eval, logvar_eval, extra_eval = model(eval_images.to(device))
-    logvar_eval = -4.6 * torch.ones(logvar_eval.shape).to(logvar_eval.device)
-    std_eval = np.exp(logvar_eval.detach().cpu().numpy() / 2.) / 10
 else:
-    img, img_next, action = next(iter(train_loader))
+    img = None
+    img_next = None
+    action = None
     n_stabilizers = None
+    logvar_eval = None
+    std_eval = None
+    ValueError(f"Dataset {args.dataset} not implemented for visualization")
+
 
 img_shape = np.array(img.shape[1:])
-print(img_shape, img.dim())
 if img.dim() == 2:
     # When the data is not composed of images
     npimages = img.detach().cpu().numpy()
@@ -83,6 +86,8 @@ mean, logvar, extra = model(img.to(device))
 mean_next, logvar_next, extra_next = model(img_next.to(device))
 logvar = -4.6 * torch.ones(logvar.shape).to(logvar.device)
 logvar_next = -4.6 * torch.ones(logvar.shape).to(logvar.device)
+logvar_eval = -4.6 * torch.ones(logvar_eval.shape).to(logvar_eval.device)
+std_eval = np.exp(logvar_eval.detach().cpu().numpy() / 2.) / 10
 
 s = torch.sin(action.squeeze(-1))
 c = torch.cos(action.squeeze(-1))
@@ -117,21 +122,8 @@ for i in range(10):
     fig.savefig(os.path.join(save_folder, f"test_{i}.png"), bbox_inches='tight')
     plt.close("all")
 
-for num_unique, unique in enumerate(np.unique(stabilizers)):
-    boolean_selection = (stabilizers == unique)
-    if args.dataset_name[0].endswith("m"):
-        print("Plotting stabilizers equal to 1")
-        fig, axes = plot_embeddings_eval(mean_eval[boolean_selection], std_eval[boolean_selection], N,
-                                         np.ones_like(stabilizers[boolean_selection]))
-        axes.set_xlim([-1.2, 1.2])
-        axes.set_ylim([-1.2, 1.2])
-    else:
-        fig, axes = plot_embeddings_eval(mean_eval[boolean_selection], std_eval[boolean_selection], N,
-                                         stabilizers[boolean_selection])
-        axes.set_xlim([-1.2, 1.2])
-        axes.set_ylim([-1.2, 1.2])
-    axes.set_title(f"Target stabilizers = {unique}")
-    fig.savefig(os.path.join(save_folder, f"{unique}_eval_embeddings.png"), bbox_inches='tight')
+# Save the plots of the embeddings on the circle
+save_embeddings_on_circle(mean_eval, std_eval, stabilizers, save_folder, args.dataset_name[0])
 
 for num_unique, unique in enumerate(np.unique(stabilizers)):
     boolean_selection = (stabilizers == unique)
