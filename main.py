@@ -120,14 +120,21 @@ def train(epoch, data_loader, mode='train'):
         # z_mean_pred = (rot @ z_mean.unsqueeze(-1)).squeeze(-1)  # Beware the detach!!!
         z_mean_pred = (rot @ z_mean.unsqueeze(-1).detach()).squeeze(-1)  # Beware the detach!!!
 
+
+        # Chamfer distance is used for validation
+        if mode == "train":
+            equiv_loss_type = args.equiv_loss
+        elif mode == "val":
+            equiv_loss_type = "chamfer"
+
         # Probabilistic losses (cross-entropy, Chamfer etc)
-        if args.equiv_loss == "binary":
+        if equiv_loss_type == "binary":
             # loss_equiv = prob_loss(z_mean_next, z_logvar_next, z_mean_pred, z_logvar, N)
             loss_equiv = prob_loss(z_mean_pred, z_logvar, z_mean_next, z_logvar_next, N)
-        elif args.equiv_loss == "chamfer":
+        elif equiv_loss_type == "chamfer":
             loss_equiv = ((z_mean_pred.unsqueeze(1) - z_mean_next.unsqueeze(2)) ** 2).sum(-1).min(dim=-1)[0].sum(
                 dim=-1).mean()  # Chamfer/Hausdorff loss
-        elif args.equiv_loss == "euclidean":
+        elif equiv_loss_type == "euclidean":
             loss_equiv = ((z_mean_pred - z_mean_next) ** 2).sum(-1).mean()
         else:
             loss_equiv = 0
@@ -157,8 +164,12 @@ def train(epoch, data_loader, mode='train'):
                 reconstruction_loss += torch.square(image - x_rec).sum(-1).mean()
                 reconstruction_loss += torch.square(img_next - x_next_rec).sum(-1).mean()
             losses.append(reconstruction_loss)
+
         # Sum all losses
-        loss = sum(losses)
+        if mode == "train":
+            loss = sum(losses)
+        elif mode == "val":
+            loss = loss_equiv
 
         if args.autoencoder == "None":
             print(

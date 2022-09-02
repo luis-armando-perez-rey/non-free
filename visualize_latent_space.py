@@ -49,7 +49,7 @@ else:
     raise ValueError(f'Dataset {args.dataset} not supported')
 
 train_loader = torch.utils.data.DataLoader(dset,
-                                           batch_size=100, shuffle=True)
+                                           batch_size=50, shuffle=True)
 device = 'cpu'
 model = load(model_file).to(device)
 model.eval()
