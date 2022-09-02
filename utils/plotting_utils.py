@@ -140,3 +140,32 @@ def save_embeddings_on_circle(mean, std, stabilizers, save_folder: str, dataset_
             axes.set_ylim([-1.2, 1.2])
         axes.set_title(f"Target stabilizers = {unique}")
         fig.savefig(os.path.join(save_folder, f"{unique}_eval_embeddings.png"), bbox_inches='tight')
+
+
+# Plotting results
+
+def load_plot_val_errors(filepath, ax=None, title=None, error_scale_log: bool = True, fontsize=20):
+    """
+    Lods the validation errors from a file and plots them
+    :param filepath: path to the file
+    :param ax: axis to plot on if None a new one is created
+    :param title: title of the plot
+    :param error_scale_log: if True the error is plotted on a log scale
+    :param fontsize: fontsize of the text and ticks
+    :return:
+    """
+    errors = np.load(filepath)
+    if ax is None:
+        fig, ax = plt.subplots(1, 1, figsize=(10, 5))
+    if title is None:
+        ax.set_title("Validation error", fontsize=fontsize)
+    else:
+        ax.set_title(title)
+    ax.plot(range(len(errors)), errors)
+    if error_scale_log:
+        ax.set_yscale('log')
+    ax.set_xlabel("Epochs", fontsize=fontsize)
+    ax.tick_params(axis='both', which='major', labelsize=fontsize)
+    ax.set_ylabel("Error", fontsize=fontsize)
+    ax.grid()
+    return fig, ax

@@ -6,7 +6,7 @@ from torch import save
 from datasets.equiv_dset import *
 from models.models_nn import *
 from utils.nn_utils import *
-from utils.plotting_utils import save_embeddings_on_circle
+from utils.plotting_utils import save_embeddings_on_circle, load_plot_val_errors
 
 parser = get_args()
 args = parser.parse_args()
@@ -200,6 +200,11 @@ def train(epoch, data_loader, mode='train'):
             std_eval = np.exp(logvar_eval.detach().cpu().numpy() / 2.) / 10
             plot_save_folder = os.path.join(os.path.join(MODEL_PATH, "figures"))
             save_embeddings_on_circle(mean_eval, std_eval, stabilizers, plot_save_folder)
+
+    # Plot and save the validation errors
+    fig, _ = load_plot_val_errors(f'{MODEL_PATH}/errors_val.npy')
+    fig.savefig(f'{MODEL_PATH}/errors_val.png')
+
 
 
 if __name__ == "__main__":
