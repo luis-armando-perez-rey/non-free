@@ -100,9 +100,6 @@ class BaseEncoder(nn.Module):
         return self.encoder(x)
 
 
-
-
-
 class DisLibEncoder1D(nn.Module):
     def __init__(self, nc: int, latent_dim: int):
         """
@@ -112,6 +109,7 @@ class DisLibEncoder1D(nn.Module):
         :param latent_dim: output latent dimension
         """
         super().__init__()
+        # noinspection PyTypeChecker
         self.encoder = nn.Sequential(
             nn.Unflatten(1, (1, nc)),
             nn.Conv1d(1, 16, kernel_size=4, stride=2, padding="valid"),
@@ -131,6 +129,7 @@ class DisLibEncoder1D(nn.Module):
     def forward(self, x):
         return self.encoder(x)
 
+
 class BaseEncoder1D(nn.Module):
     def __init__(self, nc: int, latent_dim: int):
         """
@@ -140,6 +139,7 @@ class BaseEncoder1D(nn.Module):
         :param latent_dim: output latent dimension
         """
         super().__init__()
+        # noinspection PyTypeChecker
         self.encoder = nn.Sequential(
             nn.Unflatten(1, (1, nc)),
             nn.Conv1d(1, 16, kernel_size=7, stride=1, padding="same"),
@@ -166,6 +166,7 @@ class BaseEncoder1D(nn.Module):
     def forward(self, x):
         return self.encoder(x)
 
+
 class BaseDecoder1D(nn.Module):
     def __init__(self, nc: int, dim_latent_extra: int):
         """
@@ -188,7 +189,7 @@ class BaseDecoder1D(nn.Module):
             nn.Linear(800, max_pool_size),
             nn.ReLU(),
             nn.Unflatten(-1, activation_shape),
-            nn.Conv1d(32, 32, kernel_size=3, stride=1, padding = "same"),
+            nn.Conv1d(32, 32, kernel_size=3, stride=1, padding="same"),
             nn.ReLU(),
             nn.Conv1d(32, 16, kernel_size=3, stride=1, padding="same"),
             nn.ReLU(),
@@ -209,6 +210,7 @@ class BaseDecoder1D(nn.Module):
 
     def forward(self, x):
         return self.encoder(x)
+
 
 class Squeeze(torch.nn.Module):
     def forward(self, x):

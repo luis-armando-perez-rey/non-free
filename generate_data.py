@@ -1,13 +1,15 @@
 import argparse
 from dataset_generation.rotating_arrows import generate_training_data, generate_eval_data
 from dataset_generation.simple_sinusoidal import generate_dataset_sinusoidals, generate_dataset_regular_sinusoidals
+from dataset_generation import image_translation
+
 parser = argparse.ArgumentParser()
 # Dataset
 parser.add_argument('--dataset', default='rot-arrows', type=str, help="Dataset")
 parser.add_argument('--dataset_name', default='4', type=str, help="Dataset")
 parser.add_argument("--n_arrows", nargs="+", dest="n_arrows", type=int, default=[4],
-                        help="Number of arrows to generate in dataset")
-parser.add_argument("--n_examples", dest="n_examples", default=1000, type = int, help="Number of examples per num arrows")
+                    help="Number of arrows to generate in dataset")
+parser.add_argument("--n_examples", dest="n_examples", default=1000, type=int, help="Number of examples per num arrows")
 parser.add_argument('--multicolor', default=False, action='store_true')
 args = parser.parse_args()
 
@@ -30,6 +32,9 @@ def generate_dataset(dataset):
                                      )
         generate_dataset_sinusoidals(**generation_parameters, num_examples=args.n_examples)
         generate_dataset_regular_sinusoidals(**generation_parameters, num_angles=36)
+    elif dataset == "square_translation":
+        image = image_translation.get_square_image()
+        image_translation.generate_training_data(image, args.n_examples, "./data/square_translation", args.dataset_name)
 
 
 if __name__ == "__main__":
