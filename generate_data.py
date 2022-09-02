@@ -2,6 +2,7 @@ import argparse
 from dataset_generation.rotating_arrows import generate_training_data, generate_eval_data
 from dataset_generation.simple_sinusoidal import generate_dataset_sinusoidals, generate_dataset_regular_sinusoidals
 from dataset_generation import image_translation
+from dataset_generation import dsprites_loader
 
 parser = argparse.ArgumentParser()
 # Dataset
@@ -35,6 +36,12 @@ def generate_dataset(dataset):
     elif dataset == "square_translation":
         image = image_translation.get_square_image()
         image_translation.generate_training_data(image, args.n_examples, "./data/square_translation", args.dataset_name)
+    elif dataset == "dsprites_translation":
+        images = dsprites_loader.get_images_shapes()
+        image_translation.generate_training_data(images, args.n_examples, "./data/dsprites_translation",
+                                                 args.dataset_name)
+    else:
+        raise ValueError(f"Dataset {dataset} not supported")
 
 
 if __name__ == "__main__":

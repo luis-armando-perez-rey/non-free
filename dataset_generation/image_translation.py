@@ -30,11 +30,11 @@ class ImageTranslation:
         return translated_image
 
 
-def generate_training_data(image: np.ndarray, n_datapoints: int, dataset_folder: str, dataset_name: str,
+def generate_training_data(images: np.ndarray, n_datapoints: int, dataset_folder: str, dataset_name: str,
                            n_stabilizers: int = 1):
     """
     Generates training data with random translations of image with periodic boundary conditions.
-    :param image:
+    :param images:
     :param n_datapoints: number of pairs of data to generate
     :param dataset_folder:  folder to save the dataset in
     :param dataset_name:  name of the dataset
@@ -42,29 +42,35 @@ def generate_training_data(image: np.ndarray, n_datapoints: int, dataset_folder:
     :return:
     """
     os.makedirs(dataset_folder, exist_ok=True)
-    it = ImageTranslation(image)
-    (image_width, image_height, n_channels) = it.image.shape
     equiv_data = []
     equiv_actions = []
     equiv_stabilizers = []
-    for n_datapoint in range(n_datapoints):
-        # Get random shifts in width and height for image 1 and 2
-        width_shift1 = np.random.randint(0, image_width)
-        height_shift1 = np.random.randint(0, image_height)
-        width_shift2 = np.random.randint(0, image_width)
-        height_shift2 = np.random.randint(0, image_height)
-        print("Generating pair {} image1 with shift {} and {}".format(n_datapoint, width_shift1, height_shift1))
-        print("Generating pair {} image2 with shift {} and {}".format(n_datapoint, width_shift2, height_shift2))
-        # Calculate the translation between image 1 and 2
-        width_delta = width_shift2 - width_shift1
-        height_delta = height_shift2 - height_shift1
-        # Get the images
-        image1 = it.get_translated_image(width_shift1, height_shift1)
-        image2 = it.get_translated_image(width_shift2, height_shift2)
-        # Store the data
-        equiv_actions.append([width_delta, height_delta])
-        equiv_data.append([image1, image2])
-        equiv_stabilizers = ([n_stabilizers, n_stabilizers])
+    if len(images.shape) == 3:
+        print("Only one input image provided")
+        images = images[np.newaxis, ...]
+    else:
+        print("Multiple input images provided, {}".format(images.shape[0]))
+    for image in images:
+        it = ImageTranslation(image)
+        (image_width, image_height, n_channels) = it.image.shape
+        for n_datapoint in range(n_datapoints):
+            # Get random shifts in width and height for image 1 and 2
+            width_shift1 = np.random.randint(0, image_width)
+            height_shift1 = np.random.randint(0, image_height)
+            width_shift2 = np.random.randint(0, image_width)
+            height_shift2 = np.random.randint(0, image_height)
+            print("Generating pair {} image1 with shift {} and {}".format(n_datapoint, width_shift1, height_shift1))
+            print("Generating pair {} image2 with shift {} and {}".format(n_datapoint, width_shift2, height_shift2))
+            # Calculate the translation between image 1 and 2
+            width_delta = width_shift2 - width_shift1
+            height_delta = height_shift2 - height_shift1
+            # Get the images
+            image1 = it.get_translated_image(width_shift1, height_shift1)
+            image2 = it.get_translated_image(width_shift2, height_shift2)
+            # Store the data
+            equiv_actions.append([width_delta, height_delta])
+            equiv_data.append([image1, image2])
+            equiv_stabilizers = ([n_stabilizers, n_stabilizers])
 
     equiv_data = np.array(equiv_data)
     equiv_lbls = np.array(equiv_actions)
