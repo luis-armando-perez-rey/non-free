@@ -138,3 +138,4 @@ dmypy.json
 # Ignore visualizations
 visualizations/
 utils/comet_config.py
+saved_models/
