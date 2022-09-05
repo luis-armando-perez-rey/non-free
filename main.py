@@ -2,6 +2,7 @@ from utils.parse_args import get_args
 import pickle
 import torch.utils.data
 from torch import save
+import sys
 # Import datasets
 from datasets.equiv_dset import *
 from models.models_nn import *
@@ -128,9 +129,10 @@ def train(epoch, data_loader, mode='train'):
             equiv_loss_type = "chamfer"
 
         # Probabilistic losses (cross-entropy, Chamfer etc)
-        if equiv_loss_type == "binary":
-            # loss_equiv = prob_loss(z_mean_next, z_logvar_next, z_mean_pred, z_logvar, N)
+        if equiv_loss_type == "cross-entropy":
             loss_equiv = prob_loss(z_mean_pred, z_logvar, z_mean_next, z_logvar_next, N)
+        elif equiv_loss_type == "vm-cross-entropy":
+            loss_equiv = prob_loss_vm(z_mean_pred, z_logvar, z_mean_next, z_logvar_next, N)
         elif equiv_loss_type == "chamfer":
             loss_equiv = ((z_mean_pred.unsqueeze(1) - z_mean_next.unsqueeze(2)) ** 2).sum(-1).min(dim=-1)[0].sum(
                 dim=-1).mean()  # Chamfer/Hausdorff loss
@@ -173,11 +175,11 @@ def train(epoch, data_loader, mode='train'):
 
         if args.autoencoder == "None":
             print(
-                f"{mode.upper()} Epoch: {epoch}, Batch: {batch_idx} of {len(data_loader)} Loss: {loss:.3} Loss equiv:"
+                f"{mode.upper()} Epoch: {epoch}, Batch: {batch_idx} of {len(data_loader)} Loss: {loss:.3f} Loss equiv:"
                 f" {loss_equiv:.3}")
         else:
             print(
-                f"{mode.upper()} Epoch: {epoch}, Batch: {batch_idx} of {len(data_loader)} Loss: {loss:.3} Loss equiv:"
+                f"{mode.upper()} Epoch: {epoch}, Batch: {batch_idx} of {len(data_loader)} Loss: {loss:.3f} Loss equiv:"
                 f" {loss_equiv:.3} Loss reconstruction: {reconstruction_loss:.3}")
 
         mu_loss += loss.item()
@@ -201,9 +203,10 @@ def train(epoch, data_loader, mode='train'):
             plot_save_folder = os.path.join(os.path.join(MODEL_PATH, "figures"))
             save_embeddings_on_circle(mean_eval, std_eval, stabilizers, plot_save_folder)
 
-    # Plot and save the validation errors
-    fig, _ = load_plot_val_errors(f'{MODEL_PATH}/errors_val.npy')
-    fig.savefig(f'{MODEL_PATH}/errors_val.png')
+    # Write to standard output. Allows printing to file progress when using HPC TUe
+    sys.stdout.flush()
+
+
 
 
 
@@ -212,3 +215,6 @@ if __name__ == "__main__":
         train(epoch_, train_loader, 'train')
         with torch.no_grad():
             train(epoch_, val_loader, 'val')
+    # Plot and save the validation errors
+    fig, _ = load_plot_val_errors(f'{MODEL_PATH}/errors_val.npy')
+    fig.savefig(f'{MODEL_PATH}/errors_val.png')

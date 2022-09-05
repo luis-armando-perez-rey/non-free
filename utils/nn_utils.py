@@ -39,6 +39,38 @@ def prob_loss(mean1, var1, mean2, var2, N):
     return -gmm2.log_prob(sample1).sum(0).mean() - gmm1.log_prob(sample2).sum(0).mean()
 
 
+def prob_loss_vm(mean1, logvar1, mean2, logvar2, N):
+    """
+    Estimates the crossentropy between two mixtures of N VonMises distributions. Receives mean values on the circle
+    and converts them to angles. Then, it samples from the two distributions and estimates the crossentropy.
+    Receives 2-d logvar of shape (batch_size, N, 2) and ignores one of the dimensions.
+    Considers the concentration parameter as 1 / exp(logvar1[..., -1]) ignoring the second dimension of each logvar.
+    :param mean1: mean1 on the circle
+    :param logvar1: logvar1 of shape (batch_size, N, 2)
+    :param mean2: mean2 on the circle
+    :param logvar2: logvar2 of shape (batch_size, N, 2)
+    :param N: number of components
+    :return:
+    """
+    device = mean1.device
+    # Transform mean1 to angle
+    angle1 = torch.atan2(mean1[..., -2], mean1[..., -1])
+    mix1 = D.Categorical(torch.ones((angle1.shape[0], N)).to(device))
+    comp1 = D.von_mises.VonMises(loc=angle1, concentration=1 / torch.exp(logvar1[..., -1]))
+    gmm1 = D.MixtureSameFamily(mix1, comp1)
+
+    # Transform mean2 to angle
+    angle2 = torch.atan2(mean2[..., -2], mean2[..., -1])
+    mix2 = D.Categorical(torch.ones((angle2.shape[0], N)).to(device))
+
+    comp2 = D.von_mises.VonMises(loc=angle2, concentration=1 / torch.exp(logvar2[..., -1]))
+    gmm2 = D.MixtureSameFamily(mix2, comp2)
+    sample1 = gmm1.sample((20,))
+    sample2 = gmm1.sample((20,))
+
+    return -gmm2.log_prob(sample1).sum(0).mean() - gmm1.log_prob(sample2).sum(0).mean()
+
+
 def rep_trick(mean, logvar):
     shape = mean.shape
     eps = torch.normal(torch.zeros(shape), torch.ones(shape)).to(mean.device)
