@@ -11,7 +11,7 @@ from utils.nn_utils import *
 
 # Import plotting utils
 from utils.plotting_utils import plot_extra_dims, plot_images_distributions, plot_embeddings_eval, \
-    save_embeddings_on_circle
+    save_embeddings_on_circle, plot_images_reconstructions, plot_images_multi_reconstructions
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--save-folder', type=str, default='checkpoints', help='Path to saved model')
@@ -25,6 +25,7 @@ torch.cuda.empty_cache()
 
 model_dir = "./saved_models"
 model_file = os.path.join(model_dir, args_eval.save_folder, 'model.pt')
+decoder_file = os.path.join(model_dir, args_eval.save_folder, 'decoder.pt')
 meta_file = os.path.join(model_dir, args_eval.save_folder, 'metadata.pkl')
 args = pickle.load(open(meta_file, 'rb'))['args']
 
@@ -52,6 +53,8 @@ train_loader = torch.utils.data.DataLoader(dset,
                                            batch_size=50, shuffle=True)
 device = 'cpu'
 model = load(model_file).to(device)
+if args.autoencoder != 'None':
+    decoder = load(decoder_file).to(device)
 model.eval()
 
 if args.dataset == "rot-arrows":
@@ -147,3 +150,19 @@ for num_unique, unique in enumerate(np.unique(stabilizers)):
     # Plot the images of eval data
     # fig, axes = plot_eval_images(npimages_eval[boolean_selection], n_rows=6)
     # fig.savefig(os.path.join(save_folder, f'{unique}_eval_images.png'), bbox_inches='tight')
+reconstructions = []
+
+for n in range(N):
+    if args.extra_dim > 0:
+        x_rec = decoder(torch.concat([mean_eval[:, n], extra_eval], dim=-1))
+    else:
+        x_rec = decoder(mean_eval[:, n])
+    x_rec = torch.permute(x_rec, (0, 2, 3, 1))
+    reconstructions.append(x_rec)
+reconstructions = torch.stack(reconstructions, dim=1)
+reconstructions_np = reconstructions.detach().cpu().numpy()
+for num_unique, unique in enumerate(np.unique(stabilizers)):
+    boolean_selection = (stabilizers == unique)
+    fig, _ = plot_images_multi_reconstructions(npimages_eval[boolean_selection][:5], reconstructions_np[boolean_selection][:5])
+    fig.savefig(os.path.join(save_folder, f"{unique}_reconstructions.png"), bbox_inches='tight')
+

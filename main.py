@@ -23,6 +23,7 @@ MODEL_PATH = os.path.join(args.checkpoints_dir, args.model_name)
 
 figures_dir = os.path.join(MODEL_PATH, 'figures')
 model_file = os.path.join(MODEL_PATH, 'model.pt')
+decoder_file = os.path.join(MODEL_PATH, "decoder.pt")
 meta_file = os.path.join(MODEL_PATH, 'metadata.pkl')
 log_file = os.path.join(MODEL_PATH, 'log.txt')
 
@@ -70,11 +71,11 @@ else:
     dec = None
 
 if args.optimizer == "adam":
-    optimizer = optim.Adam(parameters, lr=args.lr)
+    optimizer = torch.optim.Adam(parameters, lr=args.lr)
 elif args.optimizer == "adamw":
-    optimizer = optim.AdamW(parameters, lr=args.lr)
+    optimizer = torch.optim.AdamW(parameters, lr=args.lr)
 elif args.optimizer == "sgd":
-    optimizer = optim.SGD(parameters, lr=args.lr, momentum=0.9, nesterov=True)
+    optimizer = torch.optim.SGD(parameters, lr=args.lr, momentum=0.9, nesterov=True)
 else:
     ValueError(f"Optimizer {args.optimizer} not defined")
 
@@ -160,11 +161,16 @@ def train(epoch, data_loader, mode='train'):
         # Reconstruction
         reconstruction_loss = 0
         if args.autoencoder != "None":
-            for n in range(N):
-                x_rec = dec(z_mean[:, n])
-                x_next_rec = dec(z_mean_next[:, n])
-                reconstruction_loss += torch.square(image - x_rec).sum(-1).mean()
-                reconstruction_loss += torch.square(img_next - x_next_rec).sum(-1).mean()
+            if extra_dim > 0:
+                for n in range(N):
+                    x_rec = dec(torch.concat([z_mean[:, n], extra], dim=-1))
+                    x_next_rec = dec(torch.concat([z_mean_next[:, n], extra_next], dim=-1))
+            else:
+                for n in range(N):
+                    x_rec = dec(z_mean[:, n])
+                    x_next_rec = dec(z_mean_next[:, n])
+            reconstruction_loss += torch.square(image - x_rec).sum(-1).mean()
+            reconstruction_loss += torch.square(img_next - x_next_rec).sum(-1).mean()
             losses.append(reconstruction_loss)
 
         # Sum all losses
@@ -196,6 +202,8 @@ def train(epoch, data_loader, mode='train'):
 
         if (epoch % args.save_interval) == 0:
             save(model, model_file)
+            if args.autoencoder != "None":
+                save(dec, decoder_file)
         if (args.plot > 0) & ((epoch % (args.plot + 1)) == 0):
             mean_eval, logvar_eval, extra_eval = model(eval_images.to(device))
             logvar_eval = -4.6 * torch.ones(logvar_eval.shape).to(logvar_eval.device)

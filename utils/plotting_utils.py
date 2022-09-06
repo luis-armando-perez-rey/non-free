@@ -41,6 +41,53 @@ def add_image_to_ax(data, ax, title=None):
     return ax
 
 
+def plot_images_multi_reconstructions(images, reconstructions):
+    """
+    Plot images and reconstructions into a plot with 2 rows one for images and one for reconstructions
+    :param images: images to plot with shape (batch_size, height, width, channels)
+    :param reconstructions: reconstructions to plot with shape (batch_size, height, width, channels)
+    :return:
+    """
+    assert len(images) == len(reconstructions), "Images and reconstructions must have the same number of elements"
+    fig, axes = plt.subplots(len(images), reconstructions.shape[1] + 1,
+                             figsize=(2.5 * len(images), 2.5 * (reconstructions.shape[1] + 1)))
+    for i in range(len(images)):
+        add_image_to_ax(images[i], axes[i, 0], title=None)
+        for j in range(reconstructions.shape[1]):
+            add_image_to_ax(reconstructions[i, j], axes[i, j + 1], title=None)
+            axes[i, j].set_xticks([])
+            axes[i, j].set_yticks([])
+            if i == 0:
+                if j != 0:
+                    # Plot the number of the reconstruction
+                    axes[i, j].set_title(f"{j}")
+                else:
+                    axes[i, j].set_title(f"Original")
+        axes[i, j + 1].set_xticks([])
+        axes[i, j + 1].set_yticks([])
+        axes[0, j + 1].set_title(f"{j + 1}")
+    return fig, axes
+
+
+def plot_images_reconstructions(images, reconstructions):
+    """
+    Plot images and reconstructions into a plot with 2 rows one for images and one for reconstructions
+    :param images: images to plot with shape (batch_size, height, width, channels)
+    :param reconstructions: reconstructions to plot with shape (batch_size, height, width, channels)
+    :return:
+    """
+    assert len(images) == len(reconstructions), "Images and reconstructions must have the same number of elements"
+    fig, axes = plt.subplots(2, len(images), figsize=(2.5 * len(images), 5))
+    for i in range(len(images)):
+        add_image_to_ax(images[i], axes[0, i], title='original')
+        add_image_to_ax(reconstructions[i], axes[1, i], title='reconstruction')
+        axes[0, i].set_xticks([])
+        axes[0, i].set_yticks([])
+        axes[1, i].set_xticks([])
+        axes[1, i].set_yticks([])
+    return fig, axes
+
+
 def add_distribution_to_ax(mean, std, ax, n: int, title=None, color=None, dist_text=None):
     if color is None:
         colors = AVAILABLE_TAB_COLORS
@@ -157,6 +204,8 @@ def load_plot_val_errors(filepath, ax=None, title=None, error_scale_log: bool = 
     errors = np.load(filepath)
     if ax is None:
         fig, ax = plt.subplots(1, 1, figsize=(10, 5))
+    else:
+        fig = None
     if title is None:
         ax.set_title("Validation error", fontsize=fontsize)
     else:
