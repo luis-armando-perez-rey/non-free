@@ -27,14 +27,12 @@ def load_data(filename):
     return images, latent_values_dict
 
 
-imgs, latent_dict = load_data(FILEPATH)
-# Define number of values per latents and functions to convert to indices
-latents_sizes = latent_dict['latent_sizes']
-latents_bases = np.concatenate((latents_sizes[::-1].cumprod()[::-1][1:],
-                                np.array([1, ])))
-
-
 def latent_to_index(latents):
+    imgs, latent_dict = load_data(FILEPATH)
+    # Define number of values per latents and functions to convert to indices
+    latents_sizes = latent_dict['latent_sizes']
+    latents_bases = np.concatenate((latents_sizes[::-1].cumprod()[::-1][1:],
+                                    np.array([1, ])))
     return np.dot(latents, latents_bases).astype(int)
 
 
@@ -51,6 +49,7 @@ def get_images_shapes(shape_ids=None):
 
 
 if __name__ == "__main__":
+    imgs, latent_dict = load_data(FILEPATH)
     shape_images = get_images_shapes(imgs, [0, 1, 2])
 
     fig, axes = plt.subplots(1, 3, figsize=(10, 5))

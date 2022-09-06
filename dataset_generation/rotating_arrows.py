@@ -210,7 +210,7 @@ def generate_eval_data(num_arrows_list, dataset_folder, dataset_name, style_list
     np.save(os.path.join(dataset_folder, dataset_name + '_eval_stabilizers.npy'), stabilizers)
 
 
-def generate_two_arrow(num_arrows_pairs, dataset_folder, dataset_name, style_combinations: Optional[List[str]] = None,
+def generate_two_arrows(num_arrows_pairs, dataset_folder, dataset_name, style_combinations: Optional[List[str]] = None,
                        color_pairs: Optional[List[str]] = None,
                        total_rotations: int = 36, examples_per_pair: int = 100,
                        resolution=(64, 64), multicolor=False):
