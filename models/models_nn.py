@@ -1,7 +1,5 @@
-import torch
-
 from models.resnet import *
-from math import prod
+# from math import prod
 
 
 class View(nn.Module):
@@ -21,6 +19,10 @@ class Decoder(nn.Module):
             self.decoder = BaseDecoder1D(nc, total_latent_dim)
         elif model == "dense":
             self.decoder = BaseDenseDecoder(nc, total_latent_dim)
+        elif model == "resnet1d":
+            self.decoder = ResNet1DDec(nc, total_latent_dim)
+        elif model == "resnet":
+            self.decoder = ResNet18Dec(nc, total_latent_dim)
         else:
             ValueError(f"{model} not available for decoder")
 
@@ -178,7 +180,8 @@ class BaseDecoder1D(nn.Module):
         super().__init__()
 
         activation_shape = (32, 2 * 25)
-        max_pool_size = prod(activation_shape)
+        max_pool_size = activation_shape[0] * activation_shape[1]
+        # noinspection PyTypeChecker
         self.encoder = nn.Sequential(
             nn.Linear(dim_latent_extra, 50),
             nn.ReLU(),
@@ -198,14 +201,6 @@ class BaseDecoder1D(nn.Module):
             nn.ReLU(),
             nn.Conv1d(16, 1, kernel_size=7, stride=1, padding="same"),
             Squeeze(),
-            nn.Tanh(),
-            # nn.ConvTranspose1d(32, 32, kernel_size=3, stride=1, padding=0),
-            # nn.ReLU(),
-            # nn.ConvTranspose1d(32, 16, kernel_size=3, stride=1, padding=0),
-            # nn.ReLU(),
-            # nn.ConvTranspose1d(16, 16, kernel_size=7, stride=1, padding=0),
-            # nn.ReLU(),
-            # nn.ConvTranspose1d(16, 1, kernel_size=7, stride=1, padding=0)
         )
 
     def forward(self, x):
