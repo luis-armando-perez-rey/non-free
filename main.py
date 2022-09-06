@@ -8,6 +8,7 @@ from datasets.equiv_dset import *
 from models.models_nn import *
 from utils.nn_utils import *
 from utils.plotting_utils import save_embeddings_on_circle, load_plot_val_errors
+from models.vae import get_reconstruction_loss
 
 parser = get_args()
 args = parser.parse_args()
@@ -67,6 +68,7 @@ parameters = list(model.parameters())
 if args.autoencoder != "None":
     dec = Decoder(nc=img_shape[0], latent_dim=2, extra_dim=extra_dim, model=args.autoencoder).to(device)
     parameters += list(dec.parameters())
+    rec_loss_function = get_reconstruction_loss(args.reconstruction_loss)
 else:
     dec = None
 
@@ -169,8 +171,8 @@ def train(epoch, data_loader, mode='train'):
                 for n in range(N):
                     x_rec = dec(z_mean[:, n])
                     x_next_rec = dec(z_mean_next[:, n])
-            reconstruction_loss += torch.square(image - x_rec).sum(-1).mean()
-            reconstruction_loss += torch.square(img_next - x_next_rec).sum(-1).mean()
+            reconstruction_loss += rec_loss_function(x_rec, image).mean()
+            reconstruction_loss += rec_loss_function(x_next_rec, img_next).mean()
             losses.append(reconstruction_loss)
 
         # Sum all losses

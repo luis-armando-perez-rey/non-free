@@ -23,7 +23,6 @@ def get_args():
     parser.add_argument('--extra-dim', type=int, default=0, help="Orbit dimension")
     parser.add_argument('--tau', type=float, default=1., help="Temperature of InfoNCE")
 
-
     parser.add_argument('--checkpoints-dir', default='checkpoints', type=str)
 
     # Optimization
@@ -34,15 +33,16 @@ def get_args():
     parser.add_argument('--data-dir', default='data', type=str)
     parser.add_argument('--equiv-loss', default="binary", type=str)
 
-
     parser.add_argument('--use-comet', default=False, action='store_true')
 
     # Model
-    parser.add_argument('--identity-loss', default="infonce", type=str, help="Loss to be used for identity representation")
+    parser.add_argument('--identity-loss', default="infonce", type=str,
+                        help="Loss to be used for identity representation")
     parser.add_argument('--autoencoder', default="None", type=str, help="Autoencoder model to use")
+    parser.add_argument('--reconstruction-loss', default="bernoulli", type=str,
+                        help="Loss to be used for reconstruction")
 
     # Plotting
     parser.add_argument("--plot", default=0, type=int, help="Number of epochs to ")
-
 
     return parser
