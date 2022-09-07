@@ -8,7 +8,7 @@ from datasets.equiv_dset import *
 from models.models_nn import *
 from utils.nn_utils import *
 from utils.plotting_utils import save_embeddings_on_circle, load_plot_val_errors
-from models.vae import get_reconstruction_loss
+from models.losses import EquivarianceLoss, ReconstructionLoss
 
 parser = get_args()
 args = parser.parse_args()
@@ -65,10 +65,10 @@ extra_dim = args.extra_dim  # the invariant component
 print("Using model", args.model)
 model = MDN(img_shape[0], 2, N, extra_dim, model=args.model, normalize_extra=True).to(device)
 parameters = list(model.parameters())
-if args.autoencoder != "None":
-    dec = Decoder(nc=img_shape[0], latent_dim=2, extra_dim=extra_dim, model=args.autoencoder).to(device)
+if (args.autoencoder != "None") & (args.decoder != "None"):
+    dec = Decoder(nc=img_shape[0], latent_dim=2, extra_dim=extra_dim, model=args.decoder).to(device)
     parameters += list(dec.parameters())
-    rec_loss_function = get_reconstruction_loss(args.reconstruction_loss)
+    rec_loss_function = ReconstructionLoss(args.reconstruction_loss)
 else:
     dec = None
 
@@ -90,6 +90,11 @@ def make_rotation_matrix(action):
     rot = torch.stack([torch.stack([c, -s]), torch.stack([s, c])])
     rot = rot.permute((2, 0, 1)).unsqueeze(1)
     return rot
+
+
+# Define loss functions
+encoding_dist_constructor = get_encoding_distribution_constructor(args.enc_dist)
+identity_loss_function = get_identity_loss_function(args.identity_loss, temperature=args.tau)
 
 
 def train(epoch, data_loader, mode='train'):
@@ -115,65 +120,61 @@ def train(epoch, data_loader, mode='train'):
         # z_mean and z_mean_next have shape (batch_size, n, latent_dim)
         z_mean, z_logvar, extra = model(image)
         z_mean_next, z_logvar_next, extra_next = model(img_next)
+        # TODO: Allow for different scale values
+        # WARNING!! Notice that the scale parameter is being fixed!!!
         z_logvar = -4.6 * torch.ones(z_logvar.shape).to(z_logvar.device)
         z_logvar_next = -4.6 * torch.ones(z_logvar.shape).to(z_logvar.device)
 
         rot = make_rotation_matrix(action)
 
         # The predicted z_mean after applying the rotation corresponding to the action
-        # z_mean_pred = (rot @ z_mean.unsqueeze(-1)).squeeze(-1)  # Beware the detach!!!
         z_mean_pred = (rot @ z_mean.unsqueeze(-1).detach()).squeeze(-1)  # Beware the detach!!!
-
 
         # Chamfer distance is used for validation
         if mode == "train":
             equiv_loss_type = args.equiv_loss
         elif mode == "val":
             equiv_loss_type = "chamfer"
-
-        # Probabilistic losses (cross-entropy, Chamfer etc)
-        if equiv_loss_type == "cross-entropy":
-            loss_equiv = prob_loss(z_mean_pred, z_logvar, z_mean_next, z_logvar_next, N)
-        elif equiv_loss_type == "vm-cross-entropy":
-            loss_equiv = prob_loss_vm(z_mean_pred, z_logvar, z_mean_next, z_logvar_next, N)
-        elif equiv_loss_type == "chamfer":
-            loss_equiv = ((z_mean_pred.unsqueeze(1) - z_mean_next.unsqueeze(2)) ** 2).sum(-1).min(dim=-1)[0].sum(
-                dim=-1).mean()  # Chamfer/Hausdorff loss
-        elif equiv_loss_type == "euclidean":
-            loss_equiv = ((z_mean_pred - z_mean_next) ** 2).sum(-1).mean()
         else:
-            loss_equiv = 0
-            ValueError(f"{args.equiv_loss} not available")
+            raise ValueError(f"Mode {mode} not defined")
 
-        # loss = loss_equiv
+        # Calculate equivariance loss
+        p = encoding_dist_constructor(z_mean, z_logvar)
+        p_next = encoding_dist_constructor(z_mean_next, z_logvar_next)
+        loss_equiv = EquivarianceLoss(equiv_loss_type, args.enc_dist)(p, p_next)
         losses = [loss_equiv]
-        if extra_dim > 0:
-            if args.identity_loss == "infonce":
-                # Contrastive Loss: infoNCE w/ cosine similariy
-                distance_matrix = (extra.unsqueeze(1) * extra_next.unsqueeze(0)).sum(-1) / args.tau
-                # print("Extra shape", extra.shape)
-                loss_contra = -torch.mean(
-                    (extra * extra_next).sum(-1) / args.tau - torch.logsumexp(distance_matrix, dim=-1))
-            elif args.identity_loss == "euclidean":
-                loss_contra = 1000.0 * torch.mean(torch.sum((extra - extra_next) ** 2, dim=-1))
-            else:
-                loss_contra = 0.0
-            losses.append(loss_contra)
 
-        # Reconstruction
+        # Calculate loss identity
+        if extra_dim > 0:
+            loss_identity = identity_loss_function(extra, extra_next)
+            losses.append(loss_identity)
+
+        # Calculate reconstruction loss
         reconstruction_loss = 0
         if args.autoencoder != "None":
-            if extra_dim > 0:
-                for n in range(N):
-                    x_rec = dec(torch.concat([z_mean[:, n], extra], dim=-1))
-                    x_next_rec = dec(torch.concat([z_mean_next[:, n], extra_next], dim=-1))
-            else:
-                for n in range(N):
-                    x_rec = dec(z_mean[:, n])
-                    x_next_rec = dec(z_mean_next[:, n])
-            reconstruction_loss += rec_loss_function(x_rec, image).mean()
-            reconstruction_loss += rec_loss_function(x_next_rec, img_next).mean()
+            z, z_next = get_z_values(p, p_next, extra, extra_next, n_samples=args.num,
+                                     autoencoder_type=args.autoencoder, encoder_type=args.enc_dist)
+            for n in range(args.num):
+                x_rec = dec(z[:, n])
+                x_next_rec = dec(z_next[:, n])
+                reconstruction_loss += rec_loss_function(x_rec, image).mean()
+                reconstruction_loss += rec_loss_function(x_next_rec, img_next).mean()
             losses.append(reconstruction_loss)
+
+        # TODO: Verify that this works
+        # Calculate KL loss
+        if (args.autoencoder == "vae") and (args.enc_dist == "von-mises-mixture"):
+            # Define the prior as N Von Mises distributions randomly placed with small concentration
+            concentration = 0.01
+            prior = torch.distributions.von_mises.VonMises(
+                torch.tensor(2 * np.pi) * torch.rand((batch_size, N)).to(device),
+                torch.tensor(concentration) * torch.ones((batch_size, N)).to(device))
+            posterior_samples = p.sample((100,))
+            kl = (p.component_distribution.log_prob(posterior_samples) - prior.log_prob(posterior_samples)).mean()
+            posterior_samples = p_next.sample((100,))
+            kl_next = (p_next.component_distribution.log_prob(posterior_samples) - prior.log_prob(
+                posterior_samples)).mean()
+            losses.append(kl + kl_next)
 
         # Sum all losses
         if mode == "train":
@@ -215,9 +216,6 @@ def train(epoch, data_loader, mode='train'):
 
     # Write to standard output. Allows printing to file progress when using HPC TUe
     sys.stdout.flush()
-
-
-
 
 
 if __name__ == "__main__":
