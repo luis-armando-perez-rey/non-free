@@ -9,7 +9,7 @@ from models.models_nn import *
 from utils.nn_utils import *
 from utils.plotting_utils import save_embeddings_on_circle, load_plot_val_errors
 from models.losses import EquivarianceLoss, ReconstructionLoss, IdentityLoss
-from models.distributions import MixtureDistribution
+from models.distributions import MixtureDistribution, get_prior, get_z_values
 
 parser = get_args()
 args = parser.parse_args()
@@ -34,25 +34,17 @@ make_dir(figures_dir)
 
 pickle.dump({'args': args}, open(meta_file, 'wb'))
 print(args)
+
 # Set dataset
 print(f"Loading dataset {args.dataset} with dataset name {args.dataset_name}")
-if args.dataset == 'rot-square':
-    dset = EquivDataset(f'{args.data_dir}/square/', list_dataset_names=args.dataset_name)
-elif args.dataset == 'rot-arrows':
-    dset = EquivDataset(f'{args.data_dir}/arrows/', list_dataset_names=args.dataset_name)
-elif args.dataset == 'sinusoidal':
-    dset = EquivDataset(f'{args.data_dir}/sinusoidal/', list_dataset_names=args.dataset_name)
-    dset_eval = EvalDataset(f'{args.data_dir}/sinusoidal/', list_dataset_names=args.dataset_name)
-    eval_images = torch.FloatTensor(dset_eval.data.reshape(-1, dset_eval.data.shape[-1]))
-    stabilizers = dset_eval.stabs.reshape((-1))
-else:
-    raise ValueError(f'Dataset {args.dataset} not supported')
+dset = EquivDataset(f'{args.data_dir}/{args.dataset}/', list_dataset_names=args.dataset_name)
+dset_eval = EvalDataset(f'{args.data_dir}/{args.dataset}/', list_dataset_names=args.dataset_name)
+eval_images = torch.FloatTensor(dset_eval.data.reshape(-1, dset_eval.data.shape[-1]))
+stabilizers = dset_eval.stabs.reshape((-1))
 
 dset, dset_test = torch.utils.data.random_split(dset, [len(dset) - int(len(dset) / 10), int(len(dset) / 10)])
-train_loader = torch.utils.data.DataLoader(dset,
-                                           batch_size=args.batch_size, shuffle=True)
-val_loader = torch.utils.data.DataLoader(dset_test,
-                                         batch_size=args.batch_size, shuffle=True)
+train_loader = torch.utils.data.DataLoader(dset, batch_size=args.batch_size, shuffle=True)
+val_loader = torch.utils.data.DataLoader(dset_test, batch_size=args.batch_size, shuffle=True)
 
 print("# train set:", len(dset))
 print("# test set:", len(dset_test))
@@ -73,28 +65,13 @@ if (args.autoencoder != "None") & (args.decoder != "None"):
 else:
     dec = None
 
-if args.optimizer == "adam":
-    optimizer = torch.optim.Adam(parameters, lr=args.lr)
-elif args.optimizer == "adamw":
-    optimizer = torch.optim.AdamW(parameters, lr=args.lr)
-elif args.optimizer == "sgd":
-    optimizer = torch.optim.SGD(parameters, lr=args.lr, momentum=0.9, nesterov=True)
-else:
-    ValueError(f"Optimizer {args.optimizer} not defined")
+optimizer = get_optimizer(args.optimizer, args.lr, parameters)
 
 errors = []
 
-
-def make_rotation_matrix(action):
-    s = torch.sin(action)
-    c = torch.cos(action)
-    rot = torch.stack([torch.stack([c, -s]), torch.stack([s, c])])
-    rot = rot.permute((2, 0, 1)).unsqueeze(1)
-    return rot
-
-
+# Get prior for VAE model
+prior = get_prior(args.batch_size, args.num, 2, args.prior_dist, device)
 # Define loss functions
-encoding_dist_constructor = get_encoding_distribution_constructor(args.enc_dist)
 identity_loss_function = IdentityLoss(args.identity_loss, temperature=args.tau)
 equiv_loss_train_function = EquivarianceLoss(args.equiv_loss)
 equiv_loss_val_function = EquivarianceLoss("chamfer")
@@ -156,8 +133,10 @@ def train(epoch, data_loader, mode='train'):
         # Calculate reconstruction loss
         reconstruction_loss = 0
         if args.autoencoder != "None":
-            z, z_next = get_z_values(p, p_next, extra, extra_next, n_samples=args.num,
-                                     autoencoder_type=args.autoencoder)
+            # Get latent variables
+            z = get_z_values(p, extra, args.num, args.autoencoder)
+            z_next = get_z_values(p_next, extra_next, args.num, args.autoencoder)
+            # Calculate reconstruction loss for each of the latent representaitons
             for n in range(args.num):
                 x_rec = dec(z[:, n])
                 x_next_rec = dec(z_next[:, n])
@@ -165,20 +144,13 @@ def train(epoch, data_loader, mode='train'):
                 reconstruction_loss += rec_loss_function(x_next_rec, img_next).mean()
             losses.append(reconstruction_loss)
 
-        # TODO: Verify that this works
+        # # TODO: Verify that this works
         # Calculate KL loss
         if (args.autoencoder == "vae") and (args.enc_dist == "von-mises-mixture"):
             # Define the prior as N Von Mises distributions randomly placed with small concentration
-            concentration = 0.01
-            prior = torch.distributions.von_mises.VonMises(
-                torch.tensor(2 * np.pi) * torch.rand((batch_size, N)).to(device),
-                torch.tensor(concentration) * torch.ones((batch_size, N)).to(device))
-            posterior_samples = p.sample((100,))
-            kl = (p.component_distribution.log_prob(posterior_samples) - prior.log_prob(posterior_samples)).mean()
-            posterior_samples = p_next.sample((100,))
-            kl_next = (p_next.component_distribution.log_prob(posterior_samples) - prior.log_prob(
-                posterior_samples)).mean()
-            losses.append(kl + kl_next)
+            kl_loss = 0.0
+            kl_loss += p.approximate_kl(prior) + p_next.approximate_kl(prior)
+            losses.append(kl_loss)
 
         # Sum all losses
         if mode == "train":
@@ -186,14 +158,21 @@ def train(epoch, data_loader, mode='train'):
         elif mode == "val":
             loss = loss_equiv
 
+        # region LOGGING LOSS
+        # Print loss progress
         if args.autoencoder == "None":
             print(
                 f"{mode.upper()} Epoch: {epoch}, Batch: {batch_idx} of {len(data_loader)} Loss: {loss:.3f} Loss equiv:"
                 f" {loss_equiv:.3}")
-        else:
+        elif args.autoencoder == "ae":
             print(
                 f"{mode.upper()} Epoch: {epoch}, Batch: {batch_idx} of {len(data_loader)} Loss: {loss:.3f} Loss equiv:"
                 f" {loss_equiv:.3} Loss reconstruction: {reconstruction_loss:.3}")
+        elif args.autoencoder == "vae":
+            print(
+                f"{mode.upper()} Epoch: {epoch}, Batch: {batch_idx} of {len(data_loader)} Loss: {loss:.3f} Loss equiv:"
+                f" {loss_equiv:.3} Loss reconstruction: {reconstruction_loss:.3} Loss KL: {kl_loss:.3}")
+        # endregion
 
         mu_loss += loss.item()
 

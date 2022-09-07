@@ -6,7 +6,7 @@ from dataset_generation import dsprites_loader
 
 parser = argparse.ArgumentParser()
 # Dataset
-parser.add_argument('--dataset', default='rot-arrows', type=str, help="Dataset")
+parser.add_argument('--dataset', default='arrows', type=str, help="Dataset")
 parser.add_argument('--dataset_name', default='4', type=str, help="Dataset")
 parser.add_argument("--n_arrows", nargs="+", dest="n_arrows", type=int, default=[4],
                     help="Number of arrows to generate in dataset")
@@ -16,7 +16,7 @@ args = parser.parse_args()
 
 
 def generate_dataset(dataset):
-    if dataset == 'rot-arrows':
+    if dataset == 'arrows':
         generation_parameters = dict(num_arrows_list=args.n_arrows, color_list=["tab:red"], style_list=["simple"],
                                      dataset_folder="./data/arrows",
                                      dataset_name=args.dataset_name

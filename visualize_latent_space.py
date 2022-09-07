@@ -30,11 +30,11 @@ meta_file = os.path.join(model_dir, args_eval.save_folder, 'metadata.pkl')
 args = pickle.load(open(meta_file, 'rb'))['args']
 
 print(args)
-if args.dataset == 'rot-square':
+if args.dataset == 'square':
     dset = EquivDataset(f'{args.data_dir}/square/', list_dataset_names=args.dataset_name)
     stabilizers = None
     eval_images = None
-elif args.dataset == 'rot-arrows':
+elif args.dataset == 'arrows':
     dset = EquivDatasetStabs(f'{args.data_dir}/arrows/', list_dataset_names=args.dataset_name)
     dset_eval = EvalDataset(f'{args.data_dir}/arrows/', list_dataset_names=args.dataset_name)
     eval_images = torch.FloatTensor(dset_eval.data.reshape(-1, *dset_eval.data.shape[-3:]))
@@ -57,7 +57,7 @@ if args.autoencoder != 'None':
     decoder = load(decoder_file).to(device)
 model.eval()
 
-if args.dataset == "rot-arrows":
+if args.dataset == "arrows":
     img, img_next, action, n_stabilizers = next(iter(train_loader))
     mean_eval, logvar_eval, extra_eval = model(eval_images.to(device))
 elif args.dataset == "sinusoidal":
