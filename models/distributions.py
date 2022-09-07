@@ -125,7 +125,7 @@ def get_prior(batch_size: int, num_components: int, latent_dim: int, prior_type:
     :return:
     """
     if prior_type == "von-mises-mixture":
-        print("Using von-mises mixture prior")
+        # print("Using von-mises mixture prior")
         if "concentation" in kwargs:
             concentration = kwargs["concentration"]
         else:
@@ -136,8 +136,8 @@ def get_prior(batch_size: int, num_components: int, latent_dim: int, prior_type:
             angle, torch.tensor(concentration).to(device))
         prior = D.MixtureSameFamily(mix, components)
     elif prior_type == "gaussian-mixture":
-        print("Using gaussian mixture prior")
-        print("NOTE: Gaussian mixture prior only implemented for embeddings on the circle")
+        # print("Using gaussian mixture prior")
+        # print("NOTE: Gaussian mixture prior only implemented for embeddings on the circle")
         if "concentation" in kwargs:
             concentration = kwargs["concentration"]
         else:

@@ -69,8 +69,7 @@ optimizer = get_optimizer(args.optimizer, args.lr, parameters)
 
 errors = []
 
-# Get prior for VAE model
-prior = get_prior(args.batch_size, args.num, 2, args.prior_dist, device)
+
 # Define loss functions
 identity_loss_function = IdentityLoss(args.identity_loss, temperature=args.tau)
 equiv_loss_train_function = EquivarianceLoss(args.equiv_loss)
@@ -147,6 +146,8 @@ def train(epoch, data_loader, mode='train'):
         # # TODO: Verify that this works
         # Calculate KL loss
         if (args.autoencoder == "vae") and (args.enc_dist == "von-mises-mixture"):
+            # Get prior for VAE model
+            prior = get_prior(z_mean.shape[0], args.num, 2, args.prior_dist, device)
             # Define the prior as N Von Mises distributions randomly placed with small concentration
             kl_loss = 0.0
             kl_loss += p.approximate_kl(prior) + p_next.approximate_kl(prior)
