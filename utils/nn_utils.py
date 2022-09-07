@@ -3,6 +3,7 @@ import os
 import numpy as np
 import torch
 from torch import distributions as D
+from models.distributions import MixtureDistribution
 
 pi = torch.tensor(np.pi)
 
@@ -49,7 +50,9 @@ def get_encoding_distribution_constructor(encoder_distribution_type: str):
         ValueError(f"{encoder_distribution_type} not available")
     return encoding_distribution_constructor
 
-def cross_entropy_mixture(p1: torch.distributions.Distribution, p2: torch.distributions.Distribution, n_samples:int=20):
+
+def cross_entropy_mixture(p1: torch.distributions.Distribution, p2: torch.distributions.Distribution,
+                          n_samples: int = 20):
     """
     Estimates the crossentropy between two mixtures of distributions.
     :param p1: mixture of distributions 1
@@ -62,55 +65,6 @@ def cross_entropy_mixture(p1: torch.distributions.Distribution, p2: torch.distri
     sample2 = p2.sample((n_samples,))
 
     return -p2.log_prob(sample1).sum(0).mean() - p1.log_prob(sample2).sum(0).mean()
-
-
-def get_equivariance_loss_function(equivariance_loss_type: str, encoder_distribution_type: str):
-    """
-    Get the equivariance loss function. Equivariance loss function receives the encoding distribution for the current
-    frame and the next frame.
-    :param encoder_distribution_type: type of encoding distribution
-    :param equivariance_loss_type: type of equivariance loss
-    :return:
-    """
-    location_parameter_function = get_location_parameter_function(encoder_distribution_type)
-    if equivariance_loss_type == "cross-entropy":
-        equivariance_loss_function = cross_entropy_mixture
-    elif equivariance_loss_type == "chamfer":
-        def equivariance_loss_function(p, p_next):
-            mean = location_parameter_function(p)
-            mean_next = location_parameter_function(p_next)
-            loss = ((mean.unsqueeze(1) - mean_next.mean.unsqueeze(2)) ** 2).sum(-1).min(dim=-1)[0].sum(
-                dim=-1).mean()
-            return loss
-    elif equivariance_loss_type == "euclidean":
-        def equivariance_loss_function(p, p_next):
-            mean = location_parameter_function(p)
-            mean_next = location_parameter_function(p_next)
-            loss = ((mean - mean_next) ** 2).sum(-1).mean()
-            return loss
-    else:
-        equivariance_loss_function = None
-        ValueError(f"{equivariance_loss_type} not available")
-    return equivariance_loss_function
-
-
-def get_location_parameter_function(encoder_distribution_type: str):
-    """
-    Get the function that returns the location parameter of the encoding distribution. This is useful when using
-    mixture distributions.
-    :param encoder_distribution_type: type of encoding distribution
-    :return:
-    """
-    if encoder_distribution_type == "gaussian-mixture":
-        def location_parameter_function(p):
-            return p.component_distribution.base_dist.mean
-    elif encoder_distribution_type == "von-mises-mixture":
-        def location_parameter_function(p):
-            return p.component_distribution.mean
-    else:
-        location_parameter_function = None
-    ValueError(f"{encoder_distribution_type} not available")
-    return location_parameter_function
 
 
 def get_identity_loss_function(identity_loss_type: str, **kwargs):
@@ -137,24 +91,18 @@ def get_identity_loss_function(identity_loss_type: str, **kwargs):
     return identity_loss_function
 
 
-def get_z_values(p, p_next, extra, extra_next, n_samples: int, autoencoder_type: str, encoder_type: str):
+def get_z_values(p: MixtureDistribution, p_next: MixtureDistribution, extra: torch.tensor, extra_next: torch.tensor,
+                 n_samples: int, autoencoder_type: str):
     if autoencoder_type == "ae":
-        if encoder_type == "gaussian-mixture":
-            z = p.component_distribution.base_dist.mean
-            z_next = p_next.component_distribution.base_dist.mean
-        else:
-            z = p.component_distribution.mean
-            z_next = p_next.component_distribution.mean
+        z = p.input_mean
+        z_next = p_next.input_mean
     elif autoencoder_type == "vae":
-        z = torch.movedim(p.sample((n_samples,)), 0, 1)
-        z_next = torch.movedim(p_next.sample((n_samples,)), 0, 1)
+        z = torch.movedim(p.sample_latent((n_samples,)), 0, 1)
+        z_next = torch.movedim(p_next.sample_latent((n_samples,)), 0, 1)
     else:
         z = None
         z_next = None
         ValueError(f"Autoencoder type {autoencoder_type} not defined")
-    if encoder_type == "von-mises-mixture":
-        z = torch.stack([torch.cos(z), torch.sin(z)], dim=-1)
-        z_next = torch.stack([torch.cos(z_next), torch.sin(z_next)], dim=-1)
     # Do not change order! Append of extra dimension should be done after Von-Mises projection
     if extra.shape[-1] > 0:
         z = torch.cat([z, extra.unsqueeze(1).repeat(1, z.shape[1], 1)], dim=-1)

@@ -1,35 +1,12 @@
 import torch
 import numpy as np
+from models.distributions import MixtureDistribution
 
 
 class EquivarianceLoss:
-    def __init__(self, loss_type: str, encoder_dist_type: str):
-        self.enc_dist_type = encoder_dist_type
-        self.location_parameter_function = encoder_dist_type
+    def __init__(self, loss_type: str, **kwargs):
+        self.kwargs = kwargs
         self.loss_function = loss_type
-
-    @property
-    def location_parameter_function(self):
-        return self._location_parameter_function
-
-    @location_parameter_function.setter
-    def location_parameter_function(self, encoder_dist_type):
-        """
-        Get the function that returns the location parameter of the encoding distribution. This is useful when using
-        mixture distributions.
-        :param encoder_dist_type:
-        :return:
-        """
-        if encoder_dist_type == "gaussian-mixture":
-            def location_parameter_function(p: torch.distributions.MixtureSameFamily):
-                return p.component_distribution.base_dist.mean
-        elif encoder_dist_type == "von-mises-mixture":
-            def location_parameter_function(p: torch.distributions.MixtureSameFamily):
-                return p.component_distribution.mean
-        else:
-            location_parameter_function = None
-            ValueError(f"{self.enc_dist_type} not available")
-        self._location_parameter_function = location_parameter_function
 
     @property
     def loss_function(self):
@@ -46,18 +23,18 @@ class EquivarianceLoss:
         if loss_type == "cross-entropy":
             equivariance_loss_function = self.cross_entropy_mixture
         elif loss_type == "chamfer":
-            def equivariance_loss_function(p: torch.distributions.MixtureSameFamily,
-                                           p_next: torch.distributions.MixtureSameFamily):
-                mean = self.location_parameter_function(p)
-                mean_next = self.location_parameter_function(p_next)
-                loss = ((mean.unsqueeze(1) - mean_next.mean.unsqueeze(2)) ** 2).sum(-1).min(dim=-1)[0].sum(
+            def equivariance_loss_function(p: MixtureDistribution,
+                                           p_next: MixtureDistribution):
+                mean = p.input_mean
+                mean_next = p_next.input_mean
+                loss = ((mean.unsqueeze(1) - mean_next.unsqueeze(2)) ** 2).sum(-1).min(dim=-1)[0].sum(
                     dim=-1).mean()
                 return loss
         elif loss_type == "euclidean":
-            def equivariance_loss_function(p: torch.distributions.MixtureSameFamily,
-                                           p_next: torch.distributions.MixtureSameFamily):
-                mean = self.location_parameter_function(p)
-                mean_next = self.location_parameter_function(p_next)
+            def equivariance_loss_function(p: MixtureDistribution,
+                                           p_next: MixtureDistribution):
+                mean = p.input_mean
+                mean_next = p_next.input_mean
                 loss = ((mean - mean_next) ** 2).sum(-1).mean()
                 return loss
         else:
@@ -84,8 +61,7 @@ class EquivarianceLoss:
             ValueError(f"{encoder_distribution_type} not available")
         return location_parameter_function
 
-    @staticmethod
-    def cross_entropy_mixture(p1, p2: torch.distributions.Distribution, n_samples: int = 20):
+    def cross_entropy_mixture(self, p1, p2: torch.distributions.Distribution):
         """
             Estimates the crossentropy between two mixtures of distributions.
             :param p1: mixture of distributions 1
@@ -93,6 +69,10 @@ class EquivarianceLoss:
             :param n_samples: number of samples to estimate the crossentropy
             :return:
             """
+        if "n_samples" in self.kwargs:
+            n_samples = self.kwargs["n_samples"]
+        else:
+            n_samples = 20
         # Transform mean1 to angle
         sample1 = p1.sample((n_samples,))
         sample2 = p2.sample((n_samples,))
@@ -120,7 +100,7 @@ class IdentityLoss:
             :param loss_type: type of identity loss
             :return:
             """
-        if loss_type == "info-nce":
+        if loss_type == "infonce":
             def identity_loss_function(extra, extra_next):
                 distance_matrix = (extra.unsqueeze(1) * extra_next.unsqueeze(0)).sum(-1) / self.kwargs["temperature"]
                 loss = -torch.mean(
@@ -136,6 +116,9 @@ class IdentityLoss:
             identity_loss_function = None
             ValueError(f"{loss_type} not available")
         self._loss_function = identity_loss_function
+
+    def __call__(self, extra, extra_next):
+        return self.loss_function(extra, extra_next)
 
 
 class ReconstructionLoss:
@@ -154,7 +137,6 @@ class ReconstructionLoss:
         :param loss_type:
         :return:
         """
-
         if loss_type == 'gaussian':
             print("Using Gaussian reconstruction loss")
             if "dec_std" in self.kwargs:
@@ -180,3 +162,6 @@ class ReconstructionLoss:
         else:
             raise ValueError(f"Reconstruction loss {loss_type} not implemented")
         self._loss_function = reconstruction_loss
+
+    def __call__(self, input_data, target):
+        return self.loss_function(input_data, target)

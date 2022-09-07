@@ -8,7 +8,8 @@ from datasets.equiv_dset import *
 from models.models_nn import *
 from utils.nn_utils import *
 from utils.plotting_utils import save_embeddings_on_circle, load_plot_val_errors
-from models.losses import EquivarianceLoss, ReconstructionLoss
+from models.losses import EquivarianceLoss, ReconstructionLoss, IdentityLoss
+from models.distributions import MixtureDistribution
 
 parser = get_args()
 args = parser.parse_args()
@@ -94,7 +95,9 @@ def make_rotation_matrix(action):
 
 # Define loss functions
 encoding_dist_constructor = get_encoding_distribution_constructor(args.enc_dist)
-identity_loss_function = get_identity_loss_function(args.identity_loss, temperature=args.tau)
+identity_loss_function = IdentityLoss(args.identity_loss, temperature=args.tau)
+equiv_loss_train_function = EquivarianceLoss(args.equiv_loss)
+equiv_loss_val_function = EquivarianceLoss("chamfer")
 
 
 def train(epoch, data_loader, mode='train'):
@@ -132,16 +135,17 @@ def train(epoch, data_loader, mode='train'):
 
         # Chamfer distance is used for validation
         if mode == "train":
-            equiv_loss_type = args.equiv_loss
+            equiv_loss_function = equiv_loss_train_function
         elif mode == "val":
-            equiv_loss_type = "chamfer"
+            equiv_loss_function = equiv_loss_val_function
         else:
             raise ValueError(f"Mode {mode} not defined")
 
         # Calculate equivariance loss
-        p = encoding_dist_constructor(z_mean, z_logvar)
-        p_next = encoding_dist_constructor(z_mean_next, z_logvar_next)
-        loss_equiv = EquivarianceLoss(equiv_loss_type, args.enc_dist)(p, p_next)
+        p = MixtureDistribution(z_mean, z_logvar, args.enc_dist)
+        p_next = MixtureDistribution(z_mean_next, z_logvar_next, args.enc_dist)
+        p_pred = MixtureDistribution(z_mean_pred, z_logvar, args.enc_dist)
+        loss_equiv = equiv_loss_function(p_pred, p_next)
         losses = [loss_equiv]
 
         # Calculate loss identity
@@ -153,7 +157,7 @@ def train(epoch, data_loader, mode='train'):
         reconstruction_loss = 0
         if args.autoencoder != "None":
             z, z_next = get_z_values(p, p_next, extra, extra_next, n_samples=args.num,
-                                     autoencoder_type=args.autoencoder, encoder_type=args.enc_dist)
+                                     autoencoder_type=args.autoencoder)
             for n in range(args.num):
                 x_rec = dec(z[:, n])
                 x_next_rec = dec(z_next[:, n])

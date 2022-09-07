@@ -72,7 +72,6 @@ else:
     std_eval = None
     ValueError(f"Dataset {args.dataset} not implemented for visualization")
 
-
 img_shape = np.array(img.shape[1:])
 if img.dim() == 2:
     # When the data is not composed of images
@@ -154,15 +153,15 @@ reconstructions = []
 
 for n in range(N):
     if args.extra_dim > 0:
-        x_rec = decoder(torch.concat([mean_eval[:, n], extra_eval], dim=-1))
+        x_rec = decoder(torch.cat([mean_eval[:, n], extra_eval], dim=-1))
     else:
         x_rec = decoder(mean_eval[:, n])
-    x_rec = torch.permute(x_rec, (0, 2, 3, 1))
+    x_rec = torch.movedim(x_rec, 1, -1)
     reconstructions.append(x_rec)
 reconstructions = torch.stack(reconstructions, dim=1)
 reconstructions_np = reconstructions.detach().cpu().numpy()
 for num_unique, unique in enumerate(np.unique(stabilizers)):
     boolean_selection = (stabilizers == unique)
-    fig, _ = plot_images_multi_reconstructions(npimages_eval[boolean_selection][:5], reconstructions_np[boolean_selection][:5])
+    fig, _ = plot_images_multi_reconstructions(npimages_eval[boolean_selection][:5],
+                                               reconstructions_np[boolean_selection][:5])
     fig.savefig(os.path.join(save_folder, f"{unique}_reconstructions.png"), bbox_inches='tight')
-
