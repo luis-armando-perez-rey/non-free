@@ -142,9 +142,11 @@ def get_prior(batch_size: int, num_components: int, latent_dim: int, prior_type:
             concentration = kwargs["concentration"]
         else:
             concentration = 1.0
-        angles = torch.tensor(2 * np.pi) * torch.rand((batch_size, num_components, latent_dim)).to(device)
+        angles = torch.tensor(2 * np.pi) * torch.rand((batch_size, num_components)).to(device)
         mean = torch.stack([torch.cos(angles), torch.sin(angles)], dim=-1)
-        prior = torch.distributions.Normal(mean, scale=1.0 / concentration)
+        mix = D.Categorical(torch.ones((batch_size, num_components)).to(device))
+        component = D.Independent(D.Normal(mean, scale=1.0 / concentration), 1)
+        prior = D.MixtureSameFamily(mix, component)
     else:
         prior = None
         ValueError(f"{prior_type} not available")
