@@ -30,8 +30,19 @@ class ImageTranslation:
         return translated_image
 
 
+def pixel_shift_as_angle(pixel_shifts: int, max_shift: int):
+    """
+    Converts the pixel shifts to angles in radians
+    :param pixel_shifts:  pixel shifts to convert
+    :param max_shift:  maximum number of pixels that can be shifted in an image if an image is shifted
+    by max_shift then it will be shifted by 2pi.
+    :return:
+    """
+    return pixel_shifts * 2 * np.pi / max_shift
+
+
 def generate_training_data(images: np.ndarray, n_datapoints: int, dataset_folder: str, dataset_name: str,
-                           n_stabilizers: int = 1):
+                           n_stabilizers: int = 1, labels_as_angles: bool = True):
     """
     Generates training data with random translations of image with periodic boundary conditions.
     :param images:
@@ -39,6 +50,8 @@ def generate_training_data(images: np.ndarray, n_datapoints: int, dataset_folder
     :param dataset_folder:  folder to save the dataset in
     :param dataset_name:  name of the dataset
     :param n_stabilizers:  number of stabilizers that the input image has default is 1
+    :param labels_as_angles:  if True, the labels are the angles of the translations, if False, the labels are the
+    number of pixels shifted
     :return:
     """
     os.makedirs(dataset_folder, exist_ok=True)
@@ -64,6 +77,10 @@ def generate_training_data(images: np.ndarray, n_datapoints: int, dataset_folder
             # Calculate the translation between image 1 and 2
             width_delta = width_shift2 - width_shift1
             height_delta = height_shift2 - height_shift1
+            if labels_as_angles:
+                width_delta = pixel_shift_as_angle(width_delta, image_width)
+                height_delta = pixel_shift_as_angle(height_delta, image_height)
+
             # Get the images
             image1 = it.get_translated_image(width_shift1, height_shift1)
             image2 = it.get_translated_image(width_shift2, height_shift2)
