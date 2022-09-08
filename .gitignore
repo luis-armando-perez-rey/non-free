@@ -8,6 +8,8 @@ __pycache__/
 
 data/
 checkpoints/
+saved_models/
+visualizations/
 
 # Distribution / packaging
 .Python
@@ -135,3 +137,5 @@ dmypy.json
 .idea
 # Ignore visualizations
 visualizations/
+utils/comet_config.py
+saved_models/

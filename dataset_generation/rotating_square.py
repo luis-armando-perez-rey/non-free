@@ -48,7 +48,7 @@ res = (64, 64)
 dataset_folder = "../data/square"
 os.makedirs(dataset_folder, exist_ok=True)
 
-for i in range(N):
+for i in range(N//2):
     print(i)
     c1 = Canvas(blck, 100)
     c2 = Canvas(blck, 100)
@@ -64,6 +64,8 @@ for i in range(N):
 
     equiv_data.append([img1, img2])
     equiv_lbls.append(angle)
+
+
 
 equiv_data = np.array(equiv_data)
 equiv_lbls = np.array(equiv_lbls)
