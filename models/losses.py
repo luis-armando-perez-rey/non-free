@@ -22,13 +22,24 @@ class EquivarianceLoss:
         """
         if loss_type == "cross-entropy":
             equivariance_loss_function = self.cross_entropy_mixture
-        elif loss_type == "chamfer":
+        elif loss_type == "chamfer_val":
             def equivariance_loss_function(p: MixtureDistribution,
                                            p_next: MixtureDistribution):
                 mean = p.input_mean
                 mean_next = p_next.input_mean
                 loss = ((mean.unsqueeze(1) - mean_next.unsqueeze(2)) ** 2).sum(-1).min(dim=-1)[0].sum(
                     dim=-1).mean()
+                return loss
+        elif loss_type == "chamfer":
+            def equivariance_loss_function(p: MixtureDistribution,
+                                             p_next: MixtureDistribution):
+                mean = p.input_mean
+                mean_next = p_next.input_mean
+
+                loss = ((mean.unsqueeze(1) - mean_next.unsqueeze(2)) ** 2).sum(-1).min(dim=-1)[0].sum(
+                    dim=-1).mean()
+                reg = ((mean.unsqueeze(1) - mean.unsqueeze(2)) ** 2).sum(-1).mean()
+                loss += 0.001 * reg
                 return loss
         elif loss_type == "euclidean":
             def equivariance_loss_function(p: MixtureDistribution,

@@ -72,7 +72,7 @@ errors = []
 # Define loss functions
 identity_loss_function = IdentityLoss(args.identity_loss, temperature=args.tau)
 equiv_loss_train_function = EquivarianceLoss(args.equiv_loss)
-equiv_loss_val_function = EquivarianceLoss("chamfer")
+equiv_loss_val_function = EquivarianceLoss("chamfer_val")
 
 
 def train(epoch, data_loader, mode='train'):
