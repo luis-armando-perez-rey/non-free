@@ -27,23 +27,21 @@ def load_data(filename):
     return images, latent_values_dict
 
 
-def latent_to_index(latents):
-    imgs, latent_dict = load_data(FILEPATH)
+def latent_to_index(latents, latent_sizes):
     # Define number of values per latents and functions to convert to indices
-    latents_sizes = latent_dict['latent_sizes']
-    latents_bases = np.concatenate((latents_sizes[::-1].cumprod()[::-1][1:],
-                                    np.array([1, ])))
+    latents_bases = np.concatenate((latent_sizes[::-1].cumprod()[::-1][1:], np.array([1, ])))
     return np.dot(latents, latents_bases).astype(int)
 
 
 def get_images_shapes(shape_ids=None):
     print("Getting dsprites images per shape")
     images, latent_values_dict = load_data(FILEPATH)
+    latent_sizes = latent_values_dict["latent_sizes"]
     if shape_ids is None:
         shape_ids = [0, 1, 2]
     output_images = []
     for id in shape_ids:
-        output_images.append(images[latent_to_index([0, id, 1, 0, 0, 0])])
+        output_images.append(images[latent_to_index([0, id, 1, 0, 0, 0], latent_sizes)])
     output_images = np.array(np.expand_dims(output_images, axis=-1))
     return output_images
 
