@@ -3,6 +3,7 @@ from torch.utils.data import DataLoader
 import numpy as np
 import os
 from typing import List
+import pickle
 
 
 class EquivDataset(torch.utils.data.Dataset):
@@ -67,3 +68,37 @@ class EvalDataset(torch.utils.data.Dataset):
             self.stabs = np.concatenate([self.stabs, np.load(path + dataset_name + '_eval_stabilizers.npy', mmap_mode='r+')],
                                        axis=0)
 
+
+def PlatonicMerged(N, big=True, data_dir='data'):
+    pyra = PlatonicDataset('tetra', N=N, big=big, data_dir=data_dir)
+    octa = PlatonicDataset('octa', N=N, big=big, data_dir=data_dir)
+    cube = PlatonicDataset('cube', N=N, big=big, data_dir=data_dir)
+    return torch.utils.data.ConcatDataset([cube, octa, pyra])
+
+class PlatonicDataset(torch.utils.data.Dataset):
+    def __init__(self, platonic, N, big=True, width=64, data_dir='data', logarithmic=False):
+
+        self.classes = {'cube':0, 'tetra':1, 'octa':2}
+        self.platonic = platonic
+        self.logarithmic = logarithmic
+
+        postfix = '-big' if big else ''
+        path = f'{data_dir}/platonic/{platonic}_black_data.pkl'
+        with open(path, 'rb') as f:
+            self.data = pickle.load(f)
+
+    def __getitem__(self, idx):
+        img1, img2, action = self.data[idx]
+
+        img1 = torch.from_numpy(img1).float() / 255.
+        img2 = torch.from_numpy(img2).float() / 255.
+
+        if self.logarithmic:
+            action = scipy.linalg.logm(action)
+
+        action = torch.from_numpy(action).float()
+
+        return img1, img2, action #torch.Tensor([self.classes[self.platonic]]).long()
+
+    def __len__(self):
+        return len(self.data)

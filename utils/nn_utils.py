@@ -75,3 +75,13 @@ def rep_trick(mean, logvar):
     shape = mean.shape
     eps = torch.normal(torch.zeros(shape), torch.ones(shape)).to(mean.device)
     return eps * torch.exp(logvar / 2) + mean
+
+def antisym_matrix(z):
+    res = torch.zeros(z.shape[:-1] + (3, 3)).to(z.device)
+    res[...,0,1 ] = z[..., 0]
+    res[...,0,2 ] = z[..., 1]
+    res[...,1, 0 ] = -z[..., 0]
+    res[...,1,2 ] = z[..., 2]
+    res[...,2,0 ] = -z[..., 1]
+    res[...,2,1 ] = -z[..., 2]
+    return res
