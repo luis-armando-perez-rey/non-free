@@ -139,6 +139,9 @@ def train(epoch, data_loader, mode='train'):
         elif equiv_loss_type == "chamfer":
             loss_equiv = ((z_mean_pred.unsqueeze(1) - z_mean_next.unsqueeze(2)) ** 2).sum(-1).min(dim=-1)[0].sum(
                 dim=-1).mean()  # Chamfer/Hausdorff loss
+            if mode == "train":
+                reg = ((z_mean.unsqueeze(1) - z_mean.unsqueeze(2))**2).sum(-1).mean()
+                loss_equiv += 0.001*reg
         elif equiv_loss_type == "euclidean":
             loss_equiv = ((z_mean_pred - z_mean_next) ** 2).sum(-1).mean()
         else:
