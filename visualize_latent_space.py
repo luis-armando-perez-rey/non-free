@@ -149,19 +149,21 @@ for num_unique, unique in enumerate(np.unique(stabilizers)):
     # Plot the images of eval data
     # fig, axes = plot_eval_images(npimages_eval[boolean_selection], n_rows=6)
     # fig.savefig(os.path.join(save_folder, f'{unique}_eval_images.png'), bbox_inches='tight')
-reconstructions = []
 
-for n in range(N):
-    if args.extra_dim > 0:
-        x_rec = decoder(torch.cat([mean_eval[:, n], extra_eval], dim=-1))
-    else:
-        x_rec = decoder(mean_eval[:, n])
-    x_rec = torch.movedim(x_rec, 1, -1)
-    reconstructions.append(x_rec)
-reconstructions = torch.stack(reconstructions, dim=1)
-reconstructions_np = reconstructions.detach().cpu().numpy()
-for num_unique, unique in enumerate(np.unique(stabilizers)):
-    boolean_selection = (stabilizers == unique)
-    fig, _ = plot_images_multi_reconstructions(npimages_eval[boolean_selection][:5],
-                                               reconstructions_np[boolean_selection][:5])
-    fig.savefig(os.path.join(save_folder, f"{unique}_reconstructions.png"), bbox_inches='tight')
+# Plot reconstructions
+if args.autoencoder != 'None':
+    reconstructions = []
+    for n in range(N):
+        if args.extra_dim > 0:
+            x_rec = decoder(torch.cat([mean_eval[:, n], extra_eval], dim=-1))
+        else:
+            x_rec = decoder(mean_eval[:, n])
+        x_rec = torch.movedim(x_rec, 1, -1)
+        reconstructions.append(x_rec)
+    reconstructions = torch.stack(reconstructions, dim=1)
+    reconstructions_np = reconstructions.detach().cpu().numpy()
+    for num_unique, unique in enumerate(np.unique(stabilizers)):
+        boolean_selection = (stabilizers == unique)
+        fig, _ = plot_images_multi_reconstructions(npimages_eval[boolean_selection][:5],
+                                                   reconstructions_np[boolean_selection][:5])
+        fig.savefig(os.path.join(save_folder, f"{unique}_reconstructions.png"), bbox_inches='tight')
