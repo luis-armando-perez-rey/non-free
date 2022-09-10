@@ -67,6 +67,10 @@ if args.dataset == "arrows":
 elif args.dataset == "sinusoidal":
     img, img_next, action, n_stabilizers = next(iter(train_loader))
     mean_eval, logvar_eval, extra_eval = model(eval_images.to(device))
+elif args.dataset == "platonics":
+    img, img_next, action = next(iter(train_loader))
+    eval_images = img
+    mean_eval, logvar_eval, extra_eval = model(eval_images.to(device))
 else:
     img = None
     img_next = None
@@ -117,6 +121,8 @@ if args.latent_dim == 2:
     print(extra.shape)
 
     action = action.detach().cpu().numpy()
+
+
 
     fig, ax = plot_extra_dims(extra, color_labels=n_stabilizers)
     if fig:

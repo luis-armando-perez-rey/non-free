@@ -77,6 +77,12 @@ identity_loss_function = IdentityLoss(args.identity_loss, temperature=args.tau)
 equiv_loss_train_function = EquivarianceLoss(args.equiv_loss)
 equiv_loss_val_function = EquivarianceLoss("chamfer_val")
 
+def matrix_dist(z_mean_next, z_mean_pred, latent_dim):
+    if latent_dim == 2:
+        return ((z_mean_next.unsqueeze(2) - z_mean_pred.unsqueeze(1))**2).sum(-1)
+    elif latent_dim == 3:
+        return ((z_mean_next.unsqueeze(2) - z_mean_pred.unsqueeze(1))**2).sum(-1).sum(-1)
+
 
 def train(epoch, data_loader, mode='train'):
     mu_loss = 0
@@ -111,6 +117,7 @@ def train(epoch, data_loader, mode='train'):
         if args.latent_dim == 2:
             rot = make_rotation_matrix(action)
             # The predicted z_mean after applying the rotation corresponding to the action
+            # z_mean_pred = (rot @ z_mean.unsqueeze(-1)).squeeze(-1)  # Beware the detach!!!
             z_mean_pred = (rot @ z_mean.unsqueeze(-1).detach()).squeeze(-1)  # Beware the detach!!!
         elif args.latent_dim == 3:
             z_mean_pred = action.unsqueeze(1) @ z_mean.detach()
