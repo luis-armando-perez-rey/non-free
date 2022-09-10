@@ -51,3 +51,14 @@ def make_rotation_matrix(action):
     rot = torch.stack([torch.stack([c, -s]), torch.stack([s, c])])
     rot = rot.permute((2, 0, 1)).unsqueeze(1)
     return rot
+
+
+def antisym_matrix(z):
+    res = torch.zeros(z.shape[:-1] + (3, 3)).to(z.device)
+    res[..., 0, 1] = z[..., 0]
+    res[..., 0, 2] = z[..., 1]
+    res[..., 1, 0] = -z[..., 0]
+    res[..., 1, 2] = z[..., 2]
+    res[..., 2, 0] = -z[..., 1]
+    res[..., 2, 1] = -z[..., 2]
+    return res
