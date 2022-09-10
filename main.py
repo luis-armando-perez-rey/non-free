@@ -11,31 +11,35 @@ from utils.plotting_utils import save_embeddings_on_circle, load_plot_val_errors
 from models.losses import EquivarianceLoss, ReconstructionLoss, IdentityLoss
 from models.distributions import MixtureDistribution, get_prior, get_z_values
 
+# region PARSE ARGUMENTS
 parser = get_args()
 args = parser.parse_args()
+print(args)
+# endregion
 
+# region TORCH SETUP
+# Print set up torch device, empty cache and set random seed
 torch.cuda.empty_cache()
-
 torch.manual_seed(args.seed)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print('Using device: ', device)
+# endregion
 
-# Save paths
-MODEL_PATH = os.path.join(args.checkpoints_dir, args.model_name)
-
-figures_dir = os.path.join(MODEL_PATH, 'figures')
-model_file = os.path.join(MODEL_PATH, 'model.pt')
-decoder_file = os.path.join(MODEL_PATH, "decoder.pt")
-meta_file = os.path.join(MODEL_PATH, 'metadata.pkl')
-log_file = os.path.join(MODEL_PATH, 'log.txt')
-
-make_dir(MODEL_PATH)
+# region PATHS
+model_path = os.path.join(args.checkpoints_dir, args.model_name)
+figures_dir = os.path.join(model_path, 'figures')
+model_file = os.path.join(model_path, 'model.pt')
+decoder_file = os.path.join(model_path, "decoder.pt")
+meta_file = os.path.join(model_path, 'metadata.pkl')
+log_file = os.path.join(model_path, 'log.txt')
+make_dir(model_path)
 make_dir(figures_dir)
+# endregion
 
+# Save the arguments
 pickle.dump({'args': args}, open(meta_file, 'wb'))
-print(args)
 
-# Set dataset
+# region SET DATASET
 if args.dataset == 'platonics':
     dset = PlatonicMerged(N = 30000, data_dir=args.data_dir)
 else:
@@ -45,37 +49,44 @@ else:
     eval_images = torch.FloatTensor(dset_eval.data.reshape(-1, dset_eval.data.shape[-1]))
     stabilizers = dset_eval.stabs.reshape((-1))
 
+# Setup torch dataset
 dset, dset_test = torch.utils.data.random_split(dset, [len(dset) - int(len(dset) / 10), int(len(dset) / 10)])
 train_loader = torch.utils.data.DataLoader(dset, batch_size=args.batch_size, shuffle=True)
 val_loader = torch.utils.data.DataLoader(dset_test, batch_size=args.batch_size, shuffle=True)
-
 print("# train set:", len(dset))
 print("# test set:", len(dset_test))
 
 # Sample data
 img, _, acn = next(iter(train_loader))
 img_shape = img.shape[1:]
-N = args.num  # number of Gaussians for the mixture model
+# endregion
+
+# region SET MODEL
+n_distributions_per_subspace = args.num
+N = sum(n_distributions_per_subspace)  # number of Gaussians per group latent space
 extra_dim = args.extra_dim  # the invariant component
 
 print("Using model", args.model)
 model = MDN(img_shape[0], args.latent_dim, N, extra_dim, model=args.model, normalize_extra=True).to(device)
 parameters = list(model.parameters())
 if (args.autoencoder != "None") & (args.decoder != "None"):
-    dec = Decoder(nc=img_shape[0], latent_dim=2, extra_dim=extra_dim, model=args.decoder).to(device)
+    dec = Decoder(nc=img_shape[0], latent_dim=2 * len(n_distributions_per_subspace), extra_dim=extra_dim,
+                  model=args.decoder).to(
+        device)
     parameters += list(dec.parameters())
     rec_loss_function = ReconstructionLoss(args.reconstruction_loss)
 else:
     dec = None
+# endregion
 
 optimizer = get_optimizer(args.optimizer, args.lr, parameters)
-
 errors = []
 
-# Define loss functions
+# region LOSS FUNCTIONS
 identity_loss_function = IdentityLoss(args.identity_loss, temperature=args.tau)
 equiv_loss_train_function = EquivarianceLoss(args.equiv_loss)
 equiv_loss_val_function = EquivarianceLoss("chamfer_val")
+# endregion
 
 def matrix_dist(z_mean_next, z_mean_pred, latent_dim):
     if latent_dim == 2:
@@ -87,6 +98,14 @@ def matrix_dist(z_mean_next, z_mean_pred, latent_dim):
 def train(epoch, data_loader, mode='train'):
     mu_loss = 0
     global_step = len(data_loader) * epoch
+
+    # Chamfer distance is used for validation
+    if mode == "train":
+        equiv_loss_function = equiv_loss_train_function
+    elif mode == "val":
+        equiv_loss_function = equiv_loss_val_function
+    else:
+        raise ValueError(f"Mode {mode} not defined")
 
     for batch_idx, (image, img_next, action) in enumerate(data_loader):
         batch_size = image.shape[0]
@@ -123,13 +142,9 @@ def train(epoch, data_loader, mode='train'):
             z_mean_pred = action.unsqueeze(1) @ z_mean.detach()
 
 
-        # Chamfer distance is used for validation
-        if mode == "train":
-            equiv_loss_function = equiv_loss_train_function
-        elif mode == "val":
-            equiv_loss_function = equiv_loss_val_function
-        else:
-            raise ValueError(f"Mode {mode} not defined")
+        # TODO: change the generated actions to have shape (batch_size, N, n_subgroups)
+        # Produce rotated embeddings
+        z_mean_pred = so2_rotate_subspaces(z_mean, n_distributions_per_subspace, action)
 
         # Calculate equivariance loss
         p = MixtureDistribution(z_mean, z_logvar, args.enc_dist)
@@ -138,35 +153,35 @@ def train(epoch, data_loader, mode='train'):
         loss_equiv = equiv_loss_function(p_pred, p_next)
         losses = [loss_equiv]
 
-        # Calculate loss identity
+        # region CALCULATE IDENTITY LOSS
         if extra_dim > 0:
             loss_identity = identity_loss_function(extra, extra_next)
             losses.append(loss_identity)
+        # endregion
 
-        # Calculate reconstruction loss
+        # region CALCULATE RECONSTRUCTION LOSS
         reconstruction_loss = 0
         if args.autoencoder != "None":
             # Get latent variables
             z = get_z_values(p, extra, args.num, args.autoencoder)
             z_next = get_z_values(p_next, extra_next, args.num, args.autoencoder)
-            # Calculate reconstruction loss for each of the latent representaitons
+            # Calculate reconstruction loss for each of the latent representations
             for n in range(args.num):
                 x_rec = dec(z[:, n])
                 x_next_rec = dec(z_next[:, n])
                 reconstruction_loss += rec_loss_function(x_rec, image).mean()
                 reconstruction_loss += rec_loss_function(x_next_rec, img_next).mean()
             losses.append(reconstruction_loss)
+        # endregion
 
-        # # TODO: Verify that this works
-        # Calculate KL loss
+        # region CALCULATE KL LOSS
         if (args.autoencoder == "vae") and (
                 (args.enc_dist == "von-mises-mixture") or (args.enc_dist == "gaussian-mixture")):
             # Get prior for VAE model
             prior = get_prior(z_mean.shape[0], args.num, 2, args.prior_dist, device)
-            # Define the prior as N Von Mises distributions randomly placed with small concentration
-            kl_loss = 0.0
-            kl_loss += p.approximate_kl(prior) + p_next.approximate_kl(prior)
+            kl_loss = p.approximate_kl(prior) + p_next.approximate_kl(prior)
             losses.append(kl_loss)
+        # endregion
 
         # Sum all losses
         if mode == "train":
@@ -200,7 +215,7 @@ def train(epoch, data_loader, mode='train'):
 
     if mode == 'val':
         errors.append(mu_loss)
-        np.save(f'{MODEL_PATH}/errors_val.npy', errors)
+        np.save(f'{model_path}/errors_val.npy', errors)
 
         if (epoch % args.save_interval) == 0:
             save(model, model_file)
@@ -210,10 +225,10 @@ def train(epoch, data_loader, mode='train'):
             mean_eval, logvar_eval, extra_eval = model(eval_images.to(device))
             logvar_eval = -4.6 * torch.ones(logvar_eval.shape).to(logvar_eval.device)
             std_eval = np.exp(logvar_eval.detach().cpu().numpy() / 2.) / 10
-            plot_save_folder = os.path.join(os.path.join(MODEL_PATH, "figures"))
+            plot_save_folder = os.path.join(os.path.join(model_path, "figures"))
             save_embeddings_on_circle(mean_eval, std_eval, stabilizers, plot_save_folder)
 
-    # Write to standard output. Allows printing to file progress when using HPC TUe
+    # Write to standard output. Allows printing to file progress when using HPC
     sys.stdout.flush()
 
 
@@ -222,6 +237,4 @@ if __name__ == "__main__":
         train(epoch_, train_loader, 'train')
         with torch.no_grad():
             train(epoch_, val_loader, 'val')
-    # Plot and save the validation errors
-    fig, _ = load_plot_val_errors(f'{MODEL_PATH}/errors_val.npy')
-    fig.savefig(f'{MODEL_PATH}/errors_val.png')
+

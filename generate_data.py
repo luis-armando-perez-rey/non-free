@@ -1,8 +1,8 @@
 import argparse
 from dataset_generation.rotating_arrows import generate_training_data, generate_eval_data
 from dataset_generation.simple_sinusoidal import generate_dataset_sinusoidals, generate_dataset_regular_sinusoidals
-from dataset_generation import image_translation
-from dataset_generation import dsprites_loader
+from dataset_generation import image_translation, dsprites_loader, symmetric_solids
+
 
 parser = argparse.ArgumentParser()
 # Dataset
@@ -44,6 +44,13 @@ def generate_dataset(dataset):
         image_translation.generate_training_data(images, args.n_examples, "./data/dsprites_translation",
                                                  args.dataset_name)
         image_translation.generate_eval_data(images, 16, "./data/dsprites_translation", args.dataset_name)
+    elif dataset == "symmetric_solids":
+        print("NOTICE: In symmetric_solids dataset n_arrows option corresponds to the number of the shape id. E.g. 0 "
+              "is ")
+        symmetric_solids.generate_training_data("./data/symmetric_solids", args.n_arrows[0], args.n_examples)
+
+
+
     else:
         raise ValueError(f"Dataset {dataset} not supported")
 
