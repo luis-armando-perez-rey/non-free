@@ -160,6 +160,9 @@ def generate_training_data(num_arrows_list, dataset_folder, dataset_name, style_
     equiv_data = np.array(equiv_data)
     equiv_lbls = np.array(equiv_lbls)
     equiv_stabilizers = np.array(equiv_stabilizers)
+    print("Equiv data shape", equiv_data.shape)
+    print("Equiv lbls shape", equiv_lbls.shape)
+    print("Equiv stabilizers shape", equiv_stabilizers.shape)
 
     np.save(os.path.join(dataset_folder, dataset_name + '_data.npy'), equiv_data)
     np.save(os.path.join(dataset_folder, dataset_name + '_lbls.npy'), equiv_lbls)
@@ -206,6 +209,8 @@ def generate_eval_data(num_arrows_list, dataset_folder, dataset_name, style_list
                     stabilizers.append([num_arrows] * total_rotations)
     images = np.array(images)
     stabilizers = np.array(stabilizers)
+    print("Images shape", images.shape)
+    print("Stabilizers shape", stabilizers.shape)
     np.save(os.path.join(dataset_folder, dataset_name + '_eval_data.npy'), images)
     np.save(os.path.join(dataset_folder, dataset_name + '_eval_stabilizers.npy'), stabilizers)
 

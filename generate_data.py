@@ -12,12 +12,14 @@ parser.add_argument("--n_arrows", nargs="+", dest="n_arrows", type=int, default=
                     help="Number of arrows to generate in dataset")
 parser.add_argument("--n_examples", dest="n_examples", default=1000, type=int, help="Number of examples per num arrows")
 parser.add_argument('--multicolor', default=False, action='store_true')
+parser.add_argument("--colors", nargs="+", dest="colors", type=str, default=["tab:red"])
+parser.add_argument('--styles', nargs='+', default=['simple'], type=str, help="Styles of the arrows")
 args = parser.parse_args()
 
 
 def generate_dataset(dataset):
     if dataset == 'arrows':
-        generation_parameters = dict(num_arrows_list=args.n_arrows, color_list=["tab:red"], style_list=["simple"],
+        generation_parameters = dict(num_arrows_list=args.n_arrows, color_list=args.colors, style_list=["simple"],
                                      dataset_folder="./data/arrows",
                                      dataset_name=args.dataset_name
                                      )
