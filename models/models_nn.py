@@ -1,6 +1,7 @@
 from models.resnet import *
+from utils.nn_utils import *
 # from math import prod
-
+from utils.nn_utils import *
 
 class View(nn.Module):
     def __init__(self, size):
@@ -31,26 +32,33 @@ class Decoder(nn.Module):
 
 
 class MDN(nn.Module):
-    def __init__(self, nc: int, latent_dim: int, n_gaussians: int, extra_dim: int = 0, model: str = "cnn",
+    def __init__(self, nc: int, latent_dim: int , n_gaussians: int, extra_dim: int = 0, model: str = "cnn",
                  normalize_extra: bool = True):
         super().__init__()
+        # Converts the latent dimension for the probabilistic output (means and covs of Gaussians)
+        if latent_dim == 2:
+            converted_dim = 3 * n_gaussians
+        elif latent_dim == 3:
+            converted_dim = 6 * n_gaussians
+        else:
+            'Wrong latent dimension.'
         if model == 'cnn':
-            self.encoder = BaseEncoder(nc, 3 * n_gaussians)  # works only for latent_dim=2!
+            self.encoder = BaseEncoder(nc, converted_dim)  # works only for latent_dim=2!
             self.encoder_extra = BaseEncoder(nc, extra_dim)
         elif model == 'resnet':
-            self.encoder = ResNet18Enc(z_dim=3 * n_gaussians, nc=nc)  # works only for latent_dim=2!
+            self.encoder = ResNet18Enc(z_dim=converted_dim, nc=nc)  # works only for latent_dim=2!
             self.encoder_extra = ResNet18Enc(z_dim=extra_dim, nc=nc)
         elif model == "resnet1d":
-            self.encoder = ResNet1DEnc(z_dim=3 * n_gaussians, nc=nc)
+            self.encoder = ResNet1DEnc(z_dim=converted_dim, nc=nc)
             self.encoder_extra = ResNet1DEnc(z_dim=extra_dim, nc=nc)
         elif model == "dense":
-            self.encoder = BaseDenseEncoder(latent_dim=3 * n_gaussians, nc=nc)  # works only for latent_dim=2!
+            self.encoder = BaseDenseEncoder(latent_dim=converted_dim, nc=nc)  # works only for latent_dim=2!
             self.encoder_extra = BaseDenseEncoder(latent_dim=extra_dim, nc=nc)
         elif model == "cnn1":
-            self.encoder = BaseEncoder1D(latent_dim=3 * n_gaussians, nc=nc)
+            self.encoder = BaseEncoder1D(latent_dim=converted_dim, nc=nc)
             self.encoder_extra = BaseEncoder1D(latent_dim=extra_dim, nc=nc)
         elif model == "dislib1":
-            self.encoder = DisLibEncoder1D(latent_dim=3 * n_gaussians, nc=nc)
+            self.encoder = DisLibEncoder1D(latent_dim=converted_dim, nc=nc)
             self.encoder_extra = DisLibEncoder1D(latent_dim=extra_dim, nc=nc)
         self.latent_dim = latent_dim
         self.normalize_extra = normalize_extra
@@ -59,13 +67,20 @@ class MDN(nn.Module):
 
     def forward(self, x):
         z = self.encoder(x)
-        mean_pre = z[:, :self.n_gaussians]
-        mean = torch.cat((torch.cos(mean_pre).unsqueeze(-1), torch.sin(mean_pre).unsqueeze(-1)), dim=-1)
-        logvar = 5.4 * torch.sigmoid(z[:, self.n_gaussians: 3 * self.n_gaussians].view((-1, self.n_gaussians, 2))) - 9.2
+        if self.latent_dim == 2:
+            mean_pre = z[:, :self.n_gaussians]
+            mean = torch.cat((torch.cos(mean_pre).unsqueeze(-1), torch.sin(mean_pre).unsqueeze(-1)), dim=-1)
+            logvar = 5.4 * torch.sigmoid(z[:, self.n_gaussians: ].view((-1, self.n_gaussians, 2))) - 9.2
+        elif self.latent_dim == 3:
+            mean_pre = z[:, :3*self.n_gaussians].view((-1, self.n_gaussians, 3))
+            mean = torch.matrix_exp(antisym_matrix(mean_pre))
+            logvar = 5.4 * torch.sigmoid(z[:, 3*self.n_gaussians: ].view((-1, self.n_gaussians, 3))) - 9.2
+
         if self.normalize_extra:
             extra = F.normalize(self.encoder_extra(x), dim=-1)
         else:
             extra = self.encoder_extra(x)
+
 
         return mean, logvar, extra
 

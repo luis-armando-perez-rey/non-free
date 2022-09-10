@@ -36,11 +36,14 @@ pickle.dump({'args': args}, open(meta_file, 'wb'))
 print(args)
 
 # Set dataset
-print(f"Loading dataset {args.dataset} with dataset name {args.dataset_name}")
-dset = EquivDataset(f'{args.data_dir}/{args.dataset}/', list_dataset_names=args.dataset_name)
-dset_eval = EvalDataset(f'{args.data_dir}/{args.dataset}/', list_dataset_names=args.dataset_name)
-eval_images = torch.FloatTensor(dset_eval.data.reshape(-1, dset_eval.data.shape[-1]))
-stabilizers = dset_eval.stabs.reshape((-1))
+if args.dataset == 'platonics':
+    dset = PlatonicMerged(N = 30000, data_dir=args.data_dir)
+else:
+    print(f"Loading dataset {args.dataset} with dataset name {args.dataset_name}")
+    dset = EquivDataset(f'{args.data_dir}/{args.dataset}/', list_dataset_names=args.dataset_name)
+    dset_eval = EvalDataset(f'{args.data_dir}/{args.dataset}/', list_dataset_names=args.dataset_name)
+    eval_images = torch.FloatTensor(dset_eval.data.reshape(-1, dset_eval.data.shape[-1]))
+    stabilizers = dset_eval.stabs.reshape((-1))
 
 dset, dset_test = torch.utils.data.random_split(dset, [len(dset) - int(len(dset) / 10), int(len(dset) / 10)])
 train_loader = torch.utils.data.DataLoader(dset, batch_size=args.batch_size, shuffle=True)
@@ -56,7 +59,7 @@ N = args.num  # number of Gaussians for the mixture model
 extra_dim = args.extra_dim  # the invariant component
 
 print("Using model", args.model)
-model = MDN(img_shape[0], 2, N, extra_dim, model=args.model, normalize_extra=True).to(device)
+model = MDN(img_shape[0], args.latent_dim, N, extra_dim, model=args.model, normalize_extra=True).to(device)
 parameters = list(model.parameters())
 if (args.autoencoder != "None") & (args.decoder != "None"):
     dec = Decoder(nc=img_shape[0], latent_dim=2, extra_dim=extra_dim, model=args.decoder).to(device)
@@ -73,6 +76,12 @@ errors = []
 identity_loss_function = IdentityLoss(args.identity_loss, temperature=args.tau)
 equiv_loss_train_function = EquivarianceLoss(args.equiv_loss)
 equiv_loss_val_function = EquivarianceLoss("chamfer_val")
+
+def matrix_dist(z_mean_next, z_mean_pred, latent_dim):
+    if latent_dim == 2:
+        return ((z_mean_next.unsqueeze(2) - z_mean_pred.unsqueeze(1))**2).sum(-1)
+    elif latent_dim == 3:
+        return ((z_mean_next.unsqueeze(2) - z_mean_pred.unsqueeze(1))**2).sum(-1).sum(-1)
 
 
 def train(epoch, data_loader, mode='train'):
@@ -94,7 +103,9 @@ def train(epoch, data_loader, mode='train'):
 
         image = image.to(device)
         img_next = img_next.to(device)
-        action = action.to(device).squeeze(1)
+        action = action.to(device)
+        if args.latent_dim == 2:
+            action = action.squeeze(1)
         # z_mean and z_mean_next have shape (batch_size, n, latent_dim)
         z_mean, z_logvar, extra = model(image)
         z_mean_next, z_logvar_next, extra_next = model(img_next)
@@ -103,10 +114,14 @@ def train(epoch, data_loader, mode='train'):
         z_logvar = -4.6 * torch.ones(z_logvar.shape).to(z_logvar.device)
         z_logvar_next = -4.6 * torch.ones(z_logvar.shape).to(z_logvar.device)
 
-        rot = make_rotation_matrix(action)
+        if args.latent_dim == 2:
+            rot = make_rotation_matrix(action)
+            # The predicted z_mean after applying the rotation corresponding to the action
+            # z_mean_pred = (rot @ z_mean.unsqueeze(-1)).squeeze(-1)  # Beware the detach!!!
+            z_mean_pred = (rot @ z_mean.unsqueeze(-1).detach()).squeeze(-1)  # Beware the detach!!!
+        elif args.latent_dim == 3:
+            z_mean_pred = action.unsqueeze(1) @ z_mean.detach()
 
-        # The predicted z_mean after applying the rotation corresponding to the action
-        z_mean_pred = (rot @ z_mean.unsqueeze(-1).detach()).squeeze(-1)  # Beware the detach!!!
 
         # Chamfer distance is used for validation
         if mode == "train":
