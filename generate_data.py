@@ -48,9 +48,6 @@ def generate_dataset(dataset):
         print("NOTICE: In symmetric_solids dataset n_arrows option corresponds to the number of the shape id. E.g. 0 "
               "is ")
         symmetric_solids.generate_training_data("./data/symmetric_solids", args.n_arrows[0], args.n_examples)
-
-
-
     else:
         raise ValueError(f"Dataset {dataset} not supported")
 
