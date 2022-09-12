@@ -18,6 +18,10 @@ def get_square_image(height: int = 64, width: int = 64, n_channels: int = 1, squ
 
 class ImageTranslation:
     def __init__(self, image: np.ndarray):
+        """
+        Receives an image with shape (width, height, n_channels) and stores it in the class.
+        :param image:
+        """
         self.image = image
         self.resolution = image.shape[:-1]
         self.channels = image.shape[-1]
@@ -42,7 +46,7 @@ def pixel_shift_as_angle(pixel_shifts: int, max_shift: int):
 
 
 def generate_training_data(images: np.ndarray, n_datapoints: int, dataset_folder: str, dataset_name: str,
-                           n_stabilizers: int = 1, labels_as_angles: bool = True):
+                           n_stabilizers=None, labels_as_angles: bool = True):
     """
     Generates training data with random translations of image with periodic boundary conditions.
     :param images:
@@ -54,6 +58,8 @@ def generate_training_data(images: np.ndarray, n_datapoints: int, dataset_folder
     number of pixels shifted
     :return:
     """
+    if n_stabilizers is None:
+        n_stabilizers = [1, 1]
     os.makedirs(dataset_folder, exist_ok=True)
     equiv_data = []
     equiv_actions = []
@@ -87,10 +93,14 @@ def generate_training_data(images: np.ndarray, n_datapoints: int, dataset_folder
             # Store the data
             equiv_actions.append([width_delta, height_delta])
             equiv_data.append([image1, image2])
-            equiv_stabilizers = ([n_stabilizers, n_stabilizers])
+            equiv_stabilizers.append(n_stabilizers)
 
     equiv_data = np.array(equiv_data)
     equiv_lbls = np.array(equiv_actions)
+    equiv_stabilizers = np.array(equiv_stabilizers)
+    print("Equiv data shape: {}".format(equiv_data.shape))
+    print("Equiv lbls shape: {}".format(equiv_lbls.shape))
+    print("Equiv stabilizers shape: {}".format(equiv_stabilizers.shape))
 
     # Save the dataset
     np.save(os.path.join(dataset_folder, dataset_name + '_data.npy'), equiv_data)
@@ -99,7 +109,7 @@ def generate_training_data(images: np.ndarray, n_datapoints: int, dataset_folder
 
 
 def generate_eval_data(images: np.ndarray, n_datapoints: int, dataset_folder: str, dataset_name: str,
-                       n_stabilizers: int = 1, labels_as_angles: bool = True):
+                       n_stabilizers=None, labels_as_angles: bool = True):
     """
     Generates training data with random translations of image with periodic boundary conditions.
     :param images:
@@ -111,6 +121,8 @@ def generate_eval_data(images: np.ndarray, n_datapoints: int, dataset_folder: st
     number of pixels shifted
     :return:
     """
+    if n_stabilizers is None:
+        n_stabilizers = [1, 1]
     os.makedirs(dataset_folder, exist_ok=True)
     equiv_data = []
     equiv_actions = []
@@ -125,7 +137,6 @@ def generate_eval_data(images: np.ndarray, n_datapoints: int, dataset_folder: st
         (image_width, image_height, n_channels) = it.image.shape
         assert image_width == image_height, "Only square images are supported"
         pixel_shifts = np.arange(0, image_width, image_width // n_datapoints)
-        print(pixel_shifts)
         images_per_object = []
         equiv_actions_per_object = []
         equiv_stabilizers_per_object = []
@@ -139,14 +150,16 @@ def generate_eval_data(images: np.ndarray, n_datapoints: int, dataset_folder: st
                 if labels_as_angles:
                     width_shift = pixel_shift_as_angle(width_pixel_shift, image_width)
                     height_shift = pixel_shift_as_angle(height_pixel_shift, image_height)
+                else:
+                    width_shift = width_pixel_shift
+                    height_shift = height_pixel_shift
                 images_per_object.append(image)
                 # Store the data
-                equiv_actions_per_object.append([width_shift, height_shift])
+                equiv_actions_per_object.append([width_shift * n_stabilizers[0], height_shift * n_stabilizers[0]])
                 equiv_stabilizers_per_object.append(n_stabilizers)
         equiv_data.append(images_per_object)
         equiv_actions.append(equiv_actions_per_object)
         equiv_stabilizers.append(equiv_stabilizers_per_object)
-
 
     equiv_data = np.array(equiv_data)
     equiv_actions = np.array(equiv_actions)
@@ -155,7 +168,6 @@ def generate_eval_data(images: np.ndarray, n_datapoints: int, dataset_folder: st
     print("Data shape: {}".format(equiv_data.shape))
     print("Actions shape: {}".format(equiv_actions.shape))
     print("Stabilizers shape: {}".format(equiv_stabilizers.shape))
-
 
     # Save the dataset
     np.save(os.path.join(dataset_folder, dataset_name + '_eval_data.npy'), equiv_data)

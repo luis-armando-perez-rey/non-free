@@ -108,6 +108,27 @@ def add_distribution_to_ax(mean, std, ax, n: int, title=None, color=None, dist_t
     return ax
 
 
+def add_distribution_to_ax_torus(mean, std, ax, n: int, title=None, color=None, dist_text=None):
+    if color is None:
+        colors = AVAILABLE_TAB_COLORS
+    else:
+        colors = [color] * n
+    ax.set_aspect('equal', adjustable='box')
+    if title is not None:
+        ax.set_title(title)
+    for j in range(n):
+        angles0 = np.arctan2(mean[j, 1], mean[j, 0])
+        angles1 = np.arctan2(mean[j, 3], mean[j, 2])
+        angle_width = np.mean(std[j, 0:2])
+        angle_height = np.mean(std[j, 2:])
+        ellipse_j = Ellipse(xy=(angles0, angles1), width=angle_width, height=angle_height, color=colors[j],
+                            linewidth=15, alpha=0.8)
+        if dist_text is not None:
+            ax.text(mean[j, 0], mean[j, 1], dist_text, color="k", fontsize=12)
+        ax.add_artist(ellipse_j)
+    return ax
+
+
 def add_scatter_to_ax(mean, ax, color=None):
     if color is None:
         colors = AVAILABLE_TAB_COLORS
@@ -129,24 +150,49 @@ def plot_images_distributions(mean, std, mean_next, std_next, image,
     add_image_to_ax(image_next, axes[0, 1], title='second')
 
     # Plot encoded distribution for first image
-    add_distribution_to_ax(mean, std, axes[1, 0], n, title='before rotation')
-    axes[1, 0].set_xlim(-1.2, 1.2)
-    axes[1, 0].set_ylim(-1.2, 1.2)
+    if mean.shape[-1] == 4:
+        add_distribution_to_ax_torus(mean, std, axes[1, 0], n, title='before rotation')
+        axes[1, 0].set_xlim(-np.pi, np.pi)
+        axes[1, 0].set_ylim(-np.pi, np.pi)
+        axes[1, 0].set_xlabel("Angle of torus 1")
+        axes[1, 0].set_xlabel("Angle of torus 2")
+    else:
+        add_distribution_to_ax(mean, std, axes[1, 0], n, title='before rotation')
+        axes[1, 0].set_xlim(-1.2, 1.2)
+        axes[1, 0].set_ylim(-1.2, 1.2)
 
     # Plot encoded distribution for second image
-    add_distribution_to_ax(mean_next, std_next, axes[1, 1], n, title='after rotation')
-    axes[1, 1].set_xlim(-1.2, 1.2)
-    axes[1, 1].set_ylim(-1.2, 1.2)
-    add_scatter_to_ax(expected_mean, axes[1, 1])
+    if mean.shape[-1] == 4:
+        add_distribution_to_ax_torus(mean_next, std_next, axes[1, 1], n, title='after rotation')
+        axes[1, 1].set_xlim(-np.pi, np.pi)
+        axes[1, 1].set_ylim(-np.pi, np.pi)
+        axes[1, 1].set_xlabel("Angle of torus 1")
+        axes[1, 1].set_xlabel("Angle of torus 2")
+        expected_angles = np.stack([np.arctan2(expected_mean[:, 1], expected_mean[:, 0]),
+                                    np.arctan2(expected_mean[:, 3], expected_mean[:, 2])], axis=-1)
+        add_scatter_to_ax(expected_angles, axes[1, 1])
+    else:
+        add_distribution_to_ax(mean_next, std_next, axes[1, 1], n, title='after rotation')
+        axes[1, 1].set_xlim(-1.2, 1.2)
+        axes[1, 1].set_ylim(-1.2, 1.2)
+        add_scatter_to_ax(expected_mean, axes[1, 1])
 
     return fig, axes
 
 
 def plot_embeddings_eval(mean_values, std_values, n, stabilizers, increasing_radius=False):
+    """
+    Plot the embeddings of the validation data into the circles to visualize overall behavior.
+    :param mean_values: embeddings of the validation data
+    :param std_values: scale parameters of the embeddings
+    :param n: number of distributions per datapoint
+    :param stabilizers: number of stabilizers for each datapoint
+    :param increasing_radius: if True, the radius of the circles is increasing with the number of images seen
+    :return:
+    """
     fig, ax = plt.subplots(1, 1, figsize=(10, 10))
     cmap = mpl.cm.get_cmap('Reds')
     # Plot encoded distribution for first image
-
     for num_mean, mean in enumerate(mean_values):
         color_ratio = num_mean % (len(mean_values) / stabilizers[num_mean]) / (len(mean_values) / stabilizers[num_mean])
         if increasing_radius:
@@ -156,9 +202,24 @@ def plot_embeddings_eval(mean_values, std_values, n, stabilizers, increasing_rad
         add_distribution_to_ax(radius * mean, std_values[num_mean], ax, n, color=cmap(color_ratio),
                                dist_text=str(num_mean))
     cax = fig.add_axes([0.27, 0.5, 0.5, 0.05])
+    if not (increasing_radius):
+        fig.colorbar(mpl.cm.ScalarMappable(cmap=cmap),
+                     cax=cax, orientation='horizontal')
+    return fig, ax
 
-    fig.colorbar(mpl.cm.ScalarMappable(cmap=cmap),
-                 cax=cax, orientation='horizontal')
+
+def plot_embeddings_eval_torus(mean_values, colors=None):
+    """
+    Plot the embeddings of the validation data in the unfolded torus with colors corresponding to true angles
+    :param mean_values: embeddings of the validation data
+    :param colors: colors of the points (should depend on the true angles)
+    :return:
+    """
+    fig, ax = plt.subplots(1, 1, figsize=(10, 10))
+    # Plot encoded distribution for first image
+    for num_mean, mean in enumerate(mean_values):
+        angles = np.stack([np.arctan2(mean[:, 1], mean[:, 0]), np.arctan2(mean[:, 3], mean[:, 2])], axis=-1)
+        add_scatter_to_ax(angles, ax, color=colors[num_mean])
     return fig, ax
 
 
@@ -218,3 +279,36 @@ def load_plot_val_errors(filepath, ax=None, title=None, error_scale_log: bool = 
     ax.set_ylabel("Error", fontsize=fontsize)
     ax.grid()
     return fig, ax
+
+
+def yiq_to_rgb(yiq):
+    """
+    Convert YIQ colors to RGB.
+    :param yiq: yiq colors, shape (n_samples, 3)
+    :return:
+    """
+    conv_matrix = np.array([[1., 0.956, 0.619],
+                            [1., -0.272, 0.647],
+                            [1., -1.106, 1.703]])
+    return np.tensordot(yiq, conv_matrix, axes=((-1,), (-1)))
+
+
+def yiq_embedding(theta, phi):
+    """
+    Embed theta and phi into a YIQ color space.
+    :param theta: Theta angle in radians
+    :param phi: Phi angle in radians
+    :return:
+    """
+    result = np.zeros(theta.shape + (3,))
+    steps = 12
+    rounding = True
+    if rounding:
+        theta_rounded = 2 * np.pi * np.round(steps * theta / (2 * np.pi)) / steps
+        phi_rounded = 2 * np.pi * np.round(steps * phi / (2 * np.pi)) / steps
+        theta = theta_rounded
+        phi = phi_rounded
+    result[..., 0] = 0.5 + 0.14 * np.cos((theta + phi) * steps / 2) - 0.2 * np.sin(phi)
+    result[..., 1] = 0.25 * np.cos(phi)
+    result[..., 2] = 0.25 * np.sin(phi)
+    return yiq_to_rgb(result)
