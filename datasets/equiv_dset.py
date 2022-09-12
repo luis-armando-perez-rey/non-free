@@ -41,8 +41,7 @@ class EquivDatasetStabs(EquivDataset):
         super().__init__(path, list_dataset_names, greyscale)
         for dataset_name in list_dataset_names:
             assert os.path.exists(
-                path + dataset_name[
-                    0] + '_stabilizers.npy'), f"{dataset_name}_stabilizers.npy cardinality file not found"
+                path + dataset_name + '_stabilizers.npy'), f"{dataset_name}_stabilizers.npy cardinality file not found"
         self.stabs = np.load(path + list_dataset_names[0] + '_stabilizers.npy', mmap_mode='r+')
         for dataset_name in list_dataset_names[1:]:
             self.stabs = np.concatenate([self.stabs, np.load(path + dataset_name + '_stabilizers.npy', mmap_mode='r+')],
@@ -60,14 +59,19 @@ class EquivDatasetStabs(EquivDataset):
 
 
 class EvalDataset(torch.utils.data.Dataset):
-    def __init__(self, path: str, list_dataset_names: List[str]):
+    def __init__(self, path: str, list_dataset_names: List[str], load_labels: bool = True):
         self.data = np.load(path + list_dataset_names[0] + '_eval_data.npy', mmap_mode='r+')
         self.stabs = np.load(path + list_dataset_names[0] + '_eval_stabilizers.npy', mmap_mode='r+')
+        if load_labels:
+            self.lbls = np.load(path + list_dataset_names[0] + '_eval_lbls.npy', mmap_mode='r+')
         for dataset_name in list_dataset_names[1:]:
             self.data = np.concatenate([self.data, np.load(path + dataset_name + '_eval_data.npy', mmap_mode='r+')],
                                        axis=0)
             self.stabs = np.concatenate([self.stabs, np.load(path + dataset_name + '_eval_stabilizers.npy', mmap_mode='r+')],
                                        axis=0)
+            if load_labels:
+                self.lbls = np.concatenate([self.lbls, np.load(path + dataset_name + '_eval_lbls.npy', mmap_mode='r+')],
+                                           axis=0)
 
 
 def PlatonicMerged(N, big=True, data_dir='data'):
