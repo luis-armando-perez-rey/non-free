@@ -19,7 +19,7 @@ args = parser.parse_args()
 
 def generate_dataset(dataset):
     if dataset == 'arrows':
-        generation_parameters = dict(num_arrows_list=args.n_arrows, color_list=args.colors, style_list=["simple"],
+        generation_parameters = dict(num_arrows_list=args.n_arrows, color_list=args.colors, style_list=args.styles,
                                      dataset_folder="./data/arrows",
                                      dataset_name=args.dataset_name
                                      )

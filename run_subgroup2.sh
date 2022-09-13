@@ -3,17 +3,18 @@ source /home/TUE/s161416/miniconda3/etc/profile.d/conda.sh
 source activate gpytorch
 identity_loss="infonce"
 dataset_name="1_2"
-dataset_names=("1_1 1_2")
+dataset_names=("1_2" "2_2" "3_3")
+dataset_names=("1_2 2_1")
 dataset="sinusoidal_translation"
 N_list=(2 4 6)
 extra_dim=0
-experiment_id="cross-adam"
+experiment_id="adamw"
 latent_dim=4
 epochs=100
-optimizer="adam"
+optimizer="adamw"
 model="resnet"
 save_interval=1
-lr=1e-3
+lr=1e-4
 batch_size=128
 equiv_loss="cross-entropy"
 seed=4
