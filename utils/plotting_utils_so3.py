@@ -1,5 +1,4 @@
 import numpy as np
-import tensorflow_graphics as tfg
 import tensorflow as tf
 import matplotlib.pyplot as plt
 
@@ -13,7 +12,82 @@ Please cite the following work if using this code:
   pages = {7882--7893},
   year = {2021}
 }
+Re-implemented the tensorflow-graphics version of the function tfg.geometry.transformation.euler.from_rotation_matrix 
+to use numpy arrays to avoid using tensorflow-graphics due to some import problems. 
 """
+
+
+def safe_nonzero_sign(x):
+    ones = np.ones_like(x)
+    return np.where(np.greater_equal(x, 0), ones, -ones)
+
+
+def select_eps_for_division(dtype):
+    """Selects a small epsilon value for division.
+  Args:
+    dtype: The `dtype` of the tensor to be divided.
+  Returns:
+    A small epsilon value of the same `dtype` as `tensor`.
+  """
+    return 10.0 * np.finfo(dtype).tiny
+
+
+def from_rotation_matrix(rotation_matrix):
+    """Converts rotation matrices to Euler angles.
+    The rotation matrices are assumed to have been constructed by rotation around
+    the $$x$$, then $$y$$, and finally the $$z$$ axis.
+    Note:
+    There is an infinite number of solutions to this problem. There are
+    Gimbal locks when abs(rotation_matrix(2,0)) == 1, which are not handled.
+    Note:
+    In the following, A1 to An are optional batch dimensions.
+    Args:
+    rotation_matrix: A tensor of shape `[A1, ..., An, 3, 3]`, where the last two
+      dimensions represent a rotation matrix.
+    name: A name for this op that defaults to "euler_from_rotation_matrix".
+    Returns:
+    A tensor of shape `[A1, ..., An, 3]`, where the last dimension represents
+    the three Euler angles.
+    Raises:
+    ValueError: If the shape of `rotation_matrix` is not supported.
+    """
+
+    def general_case(rot_matrix, entry20, epsilon):
+        """Handles the general case."""
+        theta_y = -np.arcsin(entry20)
+        sign_cos_theta_y = safe_nonzero_sign(np.cos(theta_y))
+        r00 = rot_matrix[..., 0, 0]
+        r10 = rot_matrix[..., 1, 0]
+        r21 = rot_matrix[..., 2, 1]
+        r22 = rot_matrix[..., 2, 2]
+        r00 = safe_nonzero_sign(r00) * epsilon + r00
+        r22 = safe_nonzero_sign(r22) * epsilon + r22
+        # cos_theta_y evaluates to 0 on Gimbal locks, in which case the output of
+        # this function will not be used.
+        theta_z = np.arctan2(r10 * sign_cos_theta_y, r00 * sign_cos_theta_y)
+        theta_x = np.arctan2(r21 * sign_cos_theta_y, r22 * sign_cos_theta_y)
+        angles = np.stack((theta_x, theta_y, theta_z), axis=-1)
+        return angles
+
+    def gimbal_lock(rot_matrix, entry20, epsilon):
+        """Handles Gimbal locks."""
+        r01 = rot_matrix[..., 0, 1]
+        r02 = rot_matrix[..., 0, 2]
+        sign_r20 = safe_nonzero_sign(entry20)
+        r02 = safe_nonzero_sign(r02) * epsilon + r02
+        theta_x = tf.atan2(-sign_r20 * r01, -sign_r20 * r02)
+        theta_y = -sign_r20 * tf.constant(np.pi / 2.0, dtype=entry20.dtype)
+        theta_z = tf.zeros_like(theta_x)
+        angles = tf.stack((theta_x, theta_y, theta_z), axis=-1)
+        return angles
+
+    r20 = rotation_matrix[..., 2, 0]
+    eps_addition = select_eps_for_division(rotation_matrix.dtype)
+    general_solution = general_case(rotation_matrix, r20, eps_addition)
+    gimbal_solution = gimbal_lock(rotation_matrix, r20, eps_addition)
+    is_gimbal = np.equal(np.abs(r20), 1)
+    gimbal_mask = np.stack((is_gimbal, is_gimbal, is_gimbal), axis=-1)
+    return np.where(gimbal_mask, gimbal_solution, general_solution)
 
 
 def visualize_so3_probabilities(rotations,
@@ -26,8 +100,8 @@ def visualize_so3_probabilities(rotations,
                                 canonical_rotation=np.eye(3)):
     """Plot a single distribution on SO(3) using the tilt-colored method.
     Args:
-      rotations: [N, 3, 3] tensor of rotation matrices
-      probabilities: [N] tensor of probabilities
+      rotations: [N, 3, 3] numpy array of rotation matrices
+      probabilities: [N] numpy array of probabilities
       rotations_gt: [N_gt, 3, 3] or [3, 3] ground truth rotation matrices
       ax: The matplotlib.pyplot.axis object to paint
       fig: The matplotlib.pyplot.figure object to paint
@@ -46,7 +120,7 @@ def visualize_so3_probabilities(rotations,
     def _show_single_marker(ax, rotation, marker, edgecolors=True,
                             facecolors=False):
 
-        eulers = tfg.geometry.transformation.euler.from_rotation_matrix(rotation)
+        eulers = from_rotation_matrix(rotation)
         xyz = rotation[:, 0]
         tilt_angle = eulers[0]
         longitude = np.arctan2(xyz[0], -xyz[1])
@@ -62,13 +136,13 @@ def visualize_so3_probabilities(rotations,
     if ax is None:
         fig = plt.figure()
         ax = fig.add_subplot(111, projection='mollweide')
-    if rotations_gt is not None and len(tf.shape(rotations_gt)) == 2:
-        rotations_gt = rotations_gt[tf.newaxis]
+    if rotations_gt is not None and len(rotations_gt.shape) == 2:
+        rotations_gt = rotations_gt[np.newaxis]
 
     display_rotations = rotations @ canonical_rotation
     cmap = plt.cm.hsv
     scatterpoint_scaling = 4e3
-    eulers_queries = tfg.geometry.transformation.euler.from_rotation_matrix(display_rotations)
+    eulers_queries = from_rotation_matrix(display_rotations.numpy())
     xyz = display_rotations[:, :, 0]
     tilt_angles = eulers_queries[:, 0]
 
