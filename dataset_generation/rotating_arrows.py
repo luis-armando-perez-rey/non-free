@@ -185,11 +185,13 @@ def generate_eval_data(num_arrows_list, dataset_folder, dataset_name, style_list
     # Regular dataset
     images = []
     stabilizers = []
+    labels = []
     for num_arrows in num_arrows_list:
         for style in style_list:
             for color in color_list:
                 for radius in radius_list:
                     images_per_object = []
+                    labels_per_object = []
                     for num_angle, angle in enumerate(2 * np.pi * np.linspace(0, 1, total_rotations)):
                         print(num_arrows, num_angle)
                         c = ArrowCanvas(resolution=resolution)
@@ -205,13 +207,18 @@ def generate_eval_data(num_arrows_list, dataset_folder, dataset_name, style_list
                         img = c.numpy_torch_img
                         images_per_object.append(img)
                         plt.close("all")
+                        labels_per_object.append(angle)
                     images.append(images_per_object)
                     stabilizers.append([num_arrows] * total_rotations)
+                    labels.append(labels_per_object)
     images = np.array(images)
     stabilizers = np.array(stabilizers)
+    labels = np.array(labels)
     print("Images shape", images.shape)
     print("Stabilizers shape", stabilizers.shape)
+    print("Labels shape", labels.shape)
     np.save(os.path.join(dataset_folder, dataset_name + '_eval_data.npy'), images)
+    np.save(os.path.join(dataset_folder, dataset_name + '_eval_lbls.npy'), labels)
     np.save(os.path.join(dataset_folder, dataset_name + '_eval_stabilizers.npy'), stabilizers)
 
 
