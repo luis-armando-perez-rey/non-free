@@ -93,7 +93,6 @@ def add_distribution_to_ax(mean, std, ax, n: int, title=None, color=None, dist_t
         colors = AVAILABLE_TAB_COLORS
     else:
         colors = [color] * n
-    ax.set_aspect('equal', adjustable='box')
     if title is not None:
         ax.set_title(title)
     for j in range(n):
@@ -102,9 +101,6 @@ def add_distribution_to_ax(mean, std, ax, n: int, title=None, color=None, dist_t
         if dist_text is not None:
             ax.text(mean[j, 0], mean[j, 1], dist_text, color="k", fontsize=12)
         ax.add_artist(ellipse_j)
-    circle = Ellipse(xy=(0, 0), width=2, height=2, color="k",
-                     linewidth=1, alpha=0.7, fill=False)
-    ax.add_artist(circle)
     return ax
 
 
@@ -135,7 +131,7 @@ def add_scatter_to_ax(mean, ax, color=None):
     else:
         colors = [color] * len(mean)
     for j in range(len(mean)):
-        ax.scatter(mean[j, 0], mean[j, 1], marker="*", s=120, c=colors[j])
+        ax.scatter(mean[j, 0], mean[j, 1], marker="*", s=120, color=colors[j])
     return ax
 
 
@@ -158,6 +154,7 @@ def plot_images_distributions(mean, std, mean_next, std_next, image,
         axes[1, 0].set_xlabel("Angle of torus 2")
     else:
         add_distribution_to_ax(mean, std, axes[1, 0], n, title='before rotation')
+        add_unit_circle_to_ax(axes[1, 0])
         axes[1, 0].set_xlim(-1.2, 1.2)
         axes[1, 0].set_ylim(-1.2, 1.2)
 
@@ -173,6 +170,7 @@ def plot_images_distributions(mean, std, mean_next, std_next, image,
         add_scatter_to_ax(expected_angles, axes[1, 1])
     else:
         add_distribution_to_ax(mean_next, std_next, axes[1, 1], n, title='after rotation')
+        add_unit_circle_to_ax(axes[1, 1])
         axes[1, 1].set_xlim(-1.2, 1.2)
         axes[1, 1].set_ylim(-1.2, 1.2)
         add_scatter_to_ax(expected_mean, axes[1, 1])
@@ -199,13 +197,23 @@ def plot_embeddings_eval(mean_values, std_values, n, stabilizers, increasing_rad
             radius = 1.0 + color_ratio
         else:
             radius = 1.0
+            ax = add_unit_circle_to_ax(ax)
+            ax.set_aspect('equal', adjustable='box')
         add_distribution_to_ax(radius * mean, std_values[num_mean], ax, n, color=cmap(color_ratio),
                                dist_text=str(num_mean))
-    cax = fig.add_axes([0.27, 0.5, 0.5, 0.05])
-    if not (increasing_radius):
+
+    if not increasing_radius:
+        cax = fig.add_axes([0.27, 0.5, 0.5, 0.05])
         fig.colorbar(mpl.cm.ScalarMappable(cmap=cmap),
                      cax=cax, orientation='horizontal')
     return fig, ax
+
+
+def add_unit_circle_to_ax(ax):
+    circle = Ellipse(xy=(0, 0), width=2, height=2, color="k",
+                     linewidth=1, alpha=0.7, fill=False)
+    ax.add_artist(circle)
+    return ax
 
 
 def plot_embeddings_eval_torus(mean_values, colors=None):
@@ -231,23 +239,56 @@ def plot_eval_images(eval_images, n_rows):
     return fig, axes
 
 
-def save_embeddings_on_circle(mean, std, stabilizers, save_folder: str, dataset_name: str = ""):
+def save_embeddings_on_circle(mean, std, stabilizers, save_folder: str, dataset_name: str = "",
+                              increasing_radius=False):
     n_gaussians = mean.shape[1]  # Assume mean has shape (total_data, num_gaussians, latent)
-    for num_unique, unique in enumerate(np.unique(stabilizers)):
-        boolean_selection = (stabilizers == unique)
-        if dataset_name.endswith("m"):
-            print("Plotting stabilizers equal to 1")
-            fig, axes = plot_embeddings_eval(mean[boolean_selection], std[boolean_selection], n_gaussians,
-                                             np.ones_like(stabilizers[boolean_selection]))
-            axes.set_xlim([-1.2, 1.2])
-            axes.set_ylim([-1.2, 1.2])
-        else:
-            fig, axes = plot_embeddings_eval(mean[boolean_selection], std[boolean_selection], n_gaussians,
-                                             stabilizers[boolean_selection])
-            axes.set_xlim([-1.2, 1.2])
-            axes.set_ylim([-1.2, 1.2])
-        axes.set_title(f"Target stabilizers = {unique}")
-        fig.savefig(os.path.join(save_folder, f"{unique}_eval_embeddings.png"), bbox_inches='tight')
+    print("STD SHAPE", std.shape)
+    if len(stabilizers.shape) == 1:
+        for num_unique, unique in enumerate(np.unique(stabilizers)):
+            boolean_selection = (stabilizers == unique)
+            location = mean[boolean_selection, ...]
+            scale = std[boolean_selection, ...]
+            if dataset_name.endswith("m"):
+                print("Plotting stabilizers equal to 1")
+                stabs = np.ones_like(stabilizers[boolean_selection])
+
+            else:
+                stabs = stabilizers[boolean_selection]
+            fig, axes = plot_embeddings_eval(location, scale, n_gaussians, stabs, increasing_radius)
+
+            axes.set_title(f"Target stabilizers = {unique}")
+            if increasing_radius:
+                filename = f"radius_{unique}_eval_embeddings.png"
+            else:
+                filename = f"{unique}_eval_embeddings.png"
+                axes.set_xlim([-1.2, 1.2])
+                axes.set_ylim([-1.2, 1.2])
+
+            fig.savefig(os.path.join(save_folder, filename), bbox_inches='tight')
+    elif len(stabilizers.shape) == 2:
+        for num_subgroup in range(stabilizers.shape[-1]):
+            print(mean.shape, std.shape, stabilizers.shape)
+            for num_unique, unique in enumerate(np.unique(stabilizers[:, num_subgroup])):
+                boolean_selection = (stabilizers[:, num_subgroup] == unique)
+                location = mean[boolean_selection, :, 2 * num_subgroup: 2 * (num_subgroup + 1)]
+                scale = std[boolean_selection, :, 2 * num_subgroup: 2 * (num_subgroup + 1)]
+
+                if dataset_name.endswith("m"):
+                    print("Plotting stabilizers equal to 1")
+                    stabs = np.ones_like(stabilizers[boolean_selection, num_subgroup])
+                else:
+                    stabs = stabilizers[boolean_selection, num_subgroup]
+                fig, axes = plot_embeddings_eval(location, scale, n_gaussians, stabs, increasing_radius)
+
+                axes.set_title(f"Target stabilizers = {unique}")
+                if increasing_radius:
+                    filename = f"radius_sg_{num_subgroup}_stabilizer_{unique}_eval_embeddings.png"
+                else:
+                    filename = f"sg_{num_subgroup}_stabilizer_{unique}_eval_embeddings.png"
+                    axes.set_xlim([-1.2, 1.2])
+                    axes.set_ylim([-1.2, 1.2])
+                fig.savefig(os.path.join(save_folder, filename),
+                            bbox_inches='tight')
 
 
 # Plotting results
