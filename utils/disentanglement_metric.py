@@ -170,7 +170,8 @@ def dlsbd(z_loc, k_values, be_verbose: bool = False, factor_manifold: str = "tor
     return score, k_min
 
 
-def create_combinations_omega_values_range(start_value: int = -10, end_value: int = 10, n_transforms: int = 2) -> np.array:
+def create_combinations_omega_values_range(start_value: int = -10, end_value: int = 10,
+                                           n_transforms: int = 2) -> np.array:
     """
     Creates an array of all possible combinations of the k parameter in the range [start_value, end_value] over
     n_transforms
@@ -185,3 +186,55 @@ def create_combinations_omega_values_range(start_value: int = -10, end_value: in
     k_values = np.array(np.meshgrid(*values_repeated, indexing="ij"))
     k_values = np.moveaxis(k_values.reshape((n_transforms, num_k ** n_transforms)), -1, 0)
     return k_values
+
+
+def repeat_angles_n_gaussians(angles, n_gaussians):
+    """
+    Adds a new dimension to the angles array and repeats the values n_gaussians times
+    :param angles: array of angles with shape (n_objects, n_angles)
+    :param n_gaussians:
+    :return:
+    """
+    return np.repeat(np.expand_dims(angles, axis=-1), n_gaussians, axis=-1)
+
+
+def apply_inverse_rotation(z, angles):
+    """
+    Applies the inverse rotation to the latent z
+    :param z: latent with shape (n_objects, n_angles, num_gaussians, z_dim)
+    :param angles: angles with shape (n_objects, n_angles)
+    :return:
+    """
+    inv_rotations = make_rotation_matrix_2d(-angles)
+    inv_z = np.expand_dims(z, axis=-1)
+    inv_z = np.matmul(inv_rotations, inv_z)
+    inv_z = np.squeeze(inv_z, axis=-1)
+    return inv_z
+
+
+def calculate_dispersion(z_inv):
+    """
+    Calculates the dispersion of the latent z_inv
+    :param z_inv: latent with shape (n_objects, n_angles, num_gaussians, z_dim)
+    :return:
+    """
+    z_inv_mean = np.mean(z_inv, axis=1, keepdims=True)
+    dispersion = np.linalg.norm(z_inv - z_inv_mean, axis=-1)
+    return dispersion
+
+def dlsbd_metric_mixture(z, angles, average: bool = True):
+    """
+    Calculates the lsbd metric for embeddings z with shape (num_objects, num_angles, num_gaussians, latent_dim)
+    corresponding to a mixture of a certain distribution. Latent dim should be 2 in this case.
+    Shape of angles is assumed to be (num_objects, num_angles)
+    :param z: embeddings in Z_G
+    :param angles: angles used to generate the dataset where embeddings are extracted from
+    :return:
+    """
+    num_gaussians = z.shape[-2]
+    angles = repeat_angles_n_gaussians(angles, num_gaussians)
+    z_inv = apply_inverse_rotation(z, angles)
+    dispersion = calculate_dispersion(z_inv)
+    if average:
+        dispersion = np.mean(dispersion)
+    return dispersion
