@@ -183,3 +183,14 @@ class ReconstructionLoss:
 
     def __call__(self, input_data, target):
         return self.loss_function(input_data, target)
+
+
+def estimate_entropy(p: torch.distributions.Distribution, n_samples: int = 1000):
+    """
+    Estimates the entropy of a distribution.
+    :param p: distribution
+    :param n_samples: number of samples to estimate the entropy
+    :return:
+    """
+    samples = p.sample((n_samples,))
+    return -p.log_prob(samples).mean()

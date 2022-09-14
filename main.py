@@ -7,8 +7,8 @@ import sys
 from datasets.equiv_dset import *
 from models.models_nn import *
 from utils.nn_utils import *
-from utils.plotting_utils import save_embeddings_on_circle, load_plot_val_errors
-from models.losses import EquivarianceLoss, ReconstructionLoss, IdentityLoss
+from utils.plotting_utils import save_embeddings_on_circle
+from models.losses import EquivarianceLoss, ReconstructionLoss, IdentityLoss, estimate_entropy
 from models.distributions import MixtureDistribution, get_prior, get_z_values
 
 # region PARSE ARGUMENTS
@@ -45,6 +45,7 @@ if args.dataset == 'platonics':
 else:
     print(f"Loading dataset {args.dataset} with dataset name {args.dataset_name}")
     dset = EquivDataset(f'{args.data_dir}/{args.dataset}/', list_dataset_names=args.dataset_name)
+    # NOTICE THAT I REMOVED LOADING OF LABELS FOR EVAL
     dset_eval = EvalDataset(f'{args.data_dir}/{args.dataset}/', list_dataset_names=args.dataset_name)
     eval_images = torch.FloatTensor(dset_eval.data.reshape(-1, dset_eval.data.shape[-1]))
     stabilizers = dset_eval.stabs.reshape((-1))
@@ -80,6 +81,7 @@ else:
 
 optimizer = get_optimizer(args.optimizer, args.lr, parameters)
 errors = []
+entropy = []
 
 # region LOSS FUNCTIONS
 identity_loss_function = IdentityLoss(args.identity_loss, temperature=args.tau)
@@ -218,7 +220,9 @@ def train(epoch, data_loader, mode='train'):
 
     if mode == 'val':
         errors.append(mu_loss)
+        entropy.append(estimate_entropy(p, 1000).item())
         np.save(f'{model_path}/errors_val.npy', errors)
+        np.save(f'{model_path}/entropy_val.npy', entropy)
 
         if (epoch % args.save_interval) == 0:
             save(model, model_file)
