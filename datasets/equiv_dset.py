@@ -62,14 +62,16 @@ class EvalDataset(torch.utils.data.Dataset):
     def __init__(self, path: str, list_dataset_names: List[str], load_labels: bool = True):
         self.data = np.load(path + list_dataset_names[0] + '_eval_data.npy', mmap_mode='r+')
         self.stabs = np.load(path + list_dataset_names[0] + '_eval_stabilizers.npy', mmap_mode='r+')
-        if load_labels:
+        if os.path.isfile(path + list_dataset_names[0] + '_eval_lbls.npy'):
             self.lbls = np.load(path + list_dataset_names[0] + '_eval_lbls.npy', mmap_mode='r+')
+        else:
+            self.lbsl = None
         for dataset_name in list_dataset_names[1:]:
             self.data = np.concatenate([self.data, np.load(path + dataset_name + '_eval_data.npy', mmap_mode='r+')],
                                        axis=0)
             self.stabs = np.concatenate([self.stabs, np.load(path + dataset_name + '_eval_stabilizers.npy', mmap_mode='r+')],
                                        axis=0)
-            if load_labels:
+            if self.lbls is not None:
                 self.lbls = np.concatenate([self.lbls, np.load(path + dataset_name + '_eval_lbls.npy', mmap_mode='r+')],
                                            axis=0)
 
