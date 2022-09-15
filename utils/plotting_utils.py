@@ -197,13 +197,14 @@ def plot_embeddings_eval(mean_values, std_values, n, stabilizers, increasing_rad
             radius = 1.0 + color_ratio
         else:
             radius = 1.0
-            ax = add_unit_circle_to_ax(ax)
-            ax.set_aspect('equal', adjustable='box')
+
         add_distribution_to_ax(radius * mean, std_values[num_mean], ax, n, color=cmap(color_ratio),
                                dist_text=str(num_mean))
-
+    ax = add_unit_circle_to_ax(ax)
     if not increasing_radius:
         cax = fig.add_axes([0.27, 0.5, 0.5, 0.05])
+
+        ax.set_aspect('equal', adjustable='box')
         fig.colorbar(mpl.cm.ScalarMappable(cmap=cmap),
                      cax=cax, orientation='horizontal')
     return fig, ax
@@ -242,7 +243,6 @@ def plot_eval_images(eval_images, n_rows):
 def save_embeddings_on_circle(mean, std, stabilizers, save_folder: str, dataset_name: str = "",
                               increasing_radius=False):
     n_gaussians = mean.shape[1]  # Assume mean has shape (total_data, num_gaussians, latent)
-    print("STD SHAPE", std.shape)
     if len(stabilizers.shape) == 1:
         for num_unique, unique in enumerate(np.unique(stabilizers)):
             boolean_selection = (stabilizers == unique)
@@ -259,6 +259,8 @@ def save_embeddings_on_circle(mean, std, stabilizers, save_folder: str, dataset_
             axes.set_title(f"Target stabilizers = {unique}")
             if increasing_radius:
                 filename = f"radius_{unique}_eval_embeddings.png"
+                axes.set_xlim([-2.2, 2.2])
+                axes.set_ylim([-2.2, 2.2])
             else:
                 filename = f"{unique}_eval_embeddings.png"
                 axes.set_xlim([-1.2, 1.2])
@@ -267,7 +269,6 @@ def save_embeddings_on_circle(mean, std, stabilizers, save_folder: str, dataset_
             fig.savefig(os.path.join(save_folder, filename), bbox_inches='tight')
     elif len(stabilizers.shape) == 2:
         for num_subgroup in range(stabilizers.shape[-1]):
-            print(mean.shape, std.shape, stabilizers.shape)
             for num_unique, unique in enumerate(np.unique(stabilizers[:, num_subgroup])):
                 boolean_selection = (stabilizers[:, num_subgroup] == unique)
                 location = mean[boolean_selection, :, 2 * num_subgroup: 2 * (num_subgroup + 1)]

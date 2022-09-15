@@ -140,22 +140,6 @@ class MDN(nn.Module):
         self.n_gaussians = n_gaussians
         self.forward_function = self.set_forward_function()
 
-    def clifford_torus_projection(self, mean: torch.Tensor):
-        """
-        Normalize the dimensions pairwise to project the mean on the Clifford torus
-        :param mean:
-        :return:
-        """
-        device = mean.device
-        projected_mean = torch.clone(mean)
-        # Normalize the latent dimensions pairwise
-        for num_pair in range(self.latent_dim // 2):
-            projected_mean[:, :, num_pair * 2: (num_pair + 1) * 2] = torch.nn.functional.normalize(
-                mean[:, :, num_pair * 2: (num_pair + 1) * 2], p=2, dim=-1)
-        # Scale the embeddings
-        mean /= (1 / torch.sqrt(torch.tensor(self.latent_dim // 2, dtype=mean.dtype).to(device)))
-        return mean
-
     def set_forward_function(self):
         """
         Made this function to avoid if statements in the forward pass of the model (for speed)
@@ -179,6 +163,66 @@ class MDN(nn.Module):
             extra = F.normalize(self.encoder_extra(x), dim=-1)
         else:
             extra = self.encoder_extra(x)
+        return mean, logvar, extra
+
+class MDNSimplified(nn.Module):
+    def __init__(self, nc: int, latent_dim: int, n_gaussians: int, extra_dim: int = 0, model: str = "cnn",
+                 normalize_extra: bool = True):
+        super().__init__()
+        # Converts the latent dimension for the probabilistic output (means and covs of Gaussians)
+        if latent_dim == 2:
+            converted_dim = 3 * n_gaussians + extra_dim
+        elif latent_dim == 3:
+            converted_dim = 6 * n_gaussians + extra_dim
+        elif latent_dim > 3 and latent_dim % 2 == 0:
+            # 2 dimensions per Gaussian location parameter and 2 dimensions per Gaussian covariance parameter
+            converted_dim = 2 * latent_dim * n_gaussians + extra_dim
+        else:
+            converted_dim = None
+            ValueError(f"Latent dimension {latent_dim} not available for MDN")
+        if model == 'cnn':
+            self.encoder = BaseEncoder(nc, converted_dim)  # works only for latent_dim=2!
+        elif model == 'resnet':
+            self.encoder = ResNet18Enc(z_dim=converted_dim, nc=nc)  # works only for latent_dim=2!
+        elif model == "resnet1d":
+            self.encoder = ResNet1DEnc(z_dim=converted_dim, nc=nc)
+        elif model == "dense":
+            self.encoder = BaseDenseEncoder(latent_dim=converted_dim, nc=nc)  # works only for latent_dim=2!
+        elif model == "cnn1":
+            self.encoder = BaseEncoder1D(latent_dim=converted_dim, nc=nc)
+        elif model == "dislib1":
+            self.encoder = DisLibEncoder1D(latent_dim=converted_dim, nc=nc)
+        self.latent_dim = latent_dim
+        self.normalize_extra = normalize_extra
+        self.extra_dim = extra_dim
+        self.n_gaussians = n_gaussians
+        self.forward_function = self.set_forward_function()
+
+    def set_forward_function(self):
+        """
+        Made this function to avoid if statements in the forward pass of the model (for speed)
+        :return:
+        """
+        if self.latent_dim == 2:
+            forward_function = S1Encode(self.n_gaussians)
+        elif self.latent_dim == 3:
+            forward_function = SO3Encode(self.n_gaussians)
+        elif self.latent_dim > 3 and self.latent_dim % 2 == 0:
+            forward_function = TorusEncode(self.n_gaussians, self.latent_dim)
+        else:
+            raise ValueError(f"Latent dimension {self.latent_dim} not available")
+        return forward_function
+
+    def forward(self, x):
+        z = self.encoder(x)
+        if self.extra_dim == 0:
+            mean, logvar = self.forward_function(z)
+            extra = None
+        else:
+            mean, logvar = self.forward_function(z[:, :-self.extra_dim])
+            extra = z[:, -self.extra_dim:]
+            if self.normalize_extra:
+                extra = F.normalize(extra, dim=-1)
         return mean, logvar, extra
 
 

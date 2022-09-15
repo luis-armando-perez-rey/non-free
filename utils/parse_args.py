@@ -45,7 +45,8 @@ def get_args():
     parser.add_argument('--reconstruction-loss', default="bernoulli", type=str,
                         help="Loss to be used for reconstruction")
     parser.add_argument("--prior-dist", default="None", type=str, help="Prior distribution to use")
-
+    parser.add_argument('--use-simplified', default=False, action='store_true',
+                        help="Use simplified model that uses single encoder network")
     # Plotting
     parser.add_argument("--plot", default=0, type=int, help="Number of epochs to ")
 
