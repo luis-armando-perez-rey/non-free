@@ -45,9 +45,10 @@ if args.dataset == 'platonics':
 else:
     print(f"Loading dataset {args.dataset} with dataset name {args.dataset_name}")
     dset = EquivDataset(f'{args.data_dir}/{args.dataset}/', list_dataset_names=args.dataset_name)
-    dset_eval = EvalDataset(f'{args.data_dir}/{args.dataset}/', list_dataset_names=args.dataset_name)
-    eval_images = torch.FloatTensor(dset_eval.data.reshape(-1, dset_eval.data.shape[-1]))
-    stabilizers = dset_eval.stabs.reshape((-1))
+    if args.dataset != "symmetric_solids":
+        dset_eval = EvalDataset(f'{args.data_dir}/{args.dataset}/', list_dataset_names=args.dataset_name)
+        eval_images = torch.FloatTensor(dset_eval.data.reshape(-1, dset_eval.data.shape[-1]))
+        stabilizers = dset_eval.stabs.reshape((-1))
 
 # Setup torch dataset
 dset, dset_test = torch.utils.data.random_split(dset, [len(dset) - int(len(dset) / 10), int(len(dset) / 10)])
