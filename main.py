@@ -1,5 +1,4 @@
 from utils.parse_args import get_args
-import pickle
 import torch.utils.data
 from torch import save
 import sys
@@ -7,7 +6,7 @@ import sys
 from datasets.equiv_dset import *
 from models.models_nn import *
 from utils.nn_utils import *
-from utils.plotting_utils import save_embeddings_on_circle, load_plot_val_errors
+from utils.plotting_utils import save_embeddings_on_circle
 from models.losses import EquivarianceLoss, ReconstructionLoss, IdentityLoss
 from models.distributions import MixtureDistribution, get_prior, get_z_values
 
@@ -41,7 +40,7 @@ pickle.dump({'args': args}, open(meta_file, 'wb'))
 
 # region SET DATASET
 if args.dataset == 'platonics':
-    dset = PlatonicMerged(N = 30000, data_dir=args.data_dir)
+    dset = PlatonicMerged(N=30000, data_dir=args.data_dir)
 else:
     print(f"Loading dataset {args.dataset} with dataset name {args.dataset_name}")
     dset = EquivDataset(f'{args.data_dir}/{args.dataset}/', list_dataset_names=args.dataset_name)
@@ -63,15 +62,14 @@ img_shape = img.shape[1:]
 # endregion
 
 # region SET MODEL
-n_distributions_per_subspace = args.num
-N = sum(n_distributions_per_subspace)  # number of Gaussians per group latent space
+N = args.num  # number of Gaussians per group latent space
 extra_dim = args.extra_dim  # the invariant component
 
 print("Using model", args.model)
 model = MDN(img_shape[0], args.latent_dim, N, extra_dim, model=args.model, normalize_extra=True).to(device)
 parameters = list(model.parameters())
 if (args.autoencoder != "None") & (args.decoder != "None"):
-    dec = Decoder(nc=img_shape[0], latent_dim=2 * len(n_distributions_per_subspace), extra_dim=extra_dim,
+    dec = Decoder(nc=img_shape[0], latent_dim=args.latent_dim, extra_dim=extra_dim,
                   model=args.decoder).to(
         device)
     parameters += list(dec.parameters())
@@ -87,13 +85,15 @@ errors = []
 identity_loss_function = IdentityLoss(args.identity_loss, temperature=args.tau)
 equiv_loss_train_function = EquivarianceLoss(args.equiv_loss)
 equiv_loss_val_function = EquivarianceLoss("chamfer_val")
+
+
 # endregion
 
 def matrix_dist(z_mean_next, z_mean_pred, latent_dim):
     if latent_dim == 2:
-        return ((z_mean_next.unsqueeze(2) - z_mean_pred.unsqueeze(1))**2).sum(-1)
+        return ((z_mean_next.unsqueeze(2) - z_mean_pred.unsqueeze(1)) ** 2).sum(-1)
     elif latent_dim == 3:
-        return ((z_mean_next.unsqueeze(2) - z_mean_pred.unsqueeze(1))**2).sum(-1).sum(-1)
+        return ((z_mean_next.unsqueeze(2) - z_mean_pred.unsqueeze(1)) ** 2).sum(-1).sum(-1)
 
 
 def train(epoch, data_loader, mode='train'):
@@ -127,6 +127,7 @@ def train(epoch, data_loader, mode='train'):
         if args.latent_dim == 2:
             action = action.squeeze(1)
         # z_mean and z_mean_next have shape (batch_size, n, latent_dim)
+
         z_mean, z_logvar, extra = model(image)
         z_mean_next, z_logvar_next, extra_next = model(img_next)
         # TODO: Allow for different scale values
@@ -137,15 +138,9 @@ def train(epoch, data_loader, mode='train'):
         if args.latent_dim == 2:
             rot = make_rotation_matrix(action)
             # The predicted z_mean after applying the rotation corresponding to the action
-            # z_mean_pred = (rot @ z_mean.unsqueeze(-1)).squeeze(-1)  # Beware the detach!!!
             z_mean_pred = (rot @ z_mean.unsqueeze(-1).detach()).squeeze(-1)  # Beware the detach!!!
         elif args.latent_dim == 3:
-            z_mean_pred = action.unsqueeze(1) @ z_mean.detach()
-
-
-        # TODO: change the generated actions to have shape (batch_size, N, n_subgroups)
-        # Produce rotated embeddings
-        z_mean_pred = so2_rotate_subspaces(z_mean, n_distributions_per_subspace, action)
+            z_mean_pred = torch.matmul(action, z_mean.detach())
 
         # Calculate equivariance loss
         p = MixtureDistribution(z_mean, z_logvar, args.enc_dist)
@@ -182,6 +177,8 @@ def train(epoch, data_loader, mode='train'):
             prior = get_prior(z_mean.shape[0], args.num, 2, args.prior_dist, device)
             kl_loss = p.approximate_kl(prior) + p_next.approximate_kl(prior)
             losses.append(kl_loss)
+        else:
+            kl_loss = None
         # endregion
 
         # Sum all losses
@@ -189,6 +186,8 @@ def train(epoch, data_loader, mode='train'):
             loss = sum(losses)
         elif mode == "val":
             loss = loss_equiv
+        else:
+            loss = None
 
         # region LOGGING LOSS
         # Print loss progress
@@ -238,4 +237,3 @@ if __name__ == "__main__":
         train(epoch_, train_loader, 'train')
         with torch.no_grad():
             train(epoch_, val_loader, 'val')
-

@@ -39,7 +39,7 @@ def get_args():
     # Model
     parser.add_argument('--identity-loss', default="infonce", type=str,
                         help="Loss to be used for identity representation")
-    parser.add_argument('--enc-dist', default="von-mises-mixture", type=str, help="Distribution to use for encoder")
+    parser.add_argument('--enc-dist', default="gaussian-mixture", type=str, help="Distribution to use for encoder")
     parser.add_argument('--autoencoder', default="None", type=str, help="Autoencoder model to use")
     parser.add_argument('--decoder', default="None", type=str, help="Decoder model to use")
     parser.add_argument('--reconstruction-loss', default="bernoulli", type=str,

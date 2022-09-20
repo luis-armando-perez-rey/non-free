@@ -25,7 +25,7 @@ class MixturePrior(D.Distribution):
                 concentration = self.kwargs["concentration"]
             else:
                 concentration = 0.01
-            prior_dist = torch.distributions.von_mises.VonMises(
+                self._prior = torch.distributions.von_mises.VonMises(
                 torch.tensor(2 * np.pi) * torch.rand((self.batch_size, self.num_components)).to(self.device),
                 torch.tensor(concentration) * torch.ones((self.batch_size, self.num_components)).to(self.device))
 
@@ -39,7 +39,8 @@ class MixtureDistribution(D.MixtureSameFamily):
         self.input_logvar = input_logvar
         self.components = encoder_distribution_type
         mix = D.Categorical(torch.ones((self.input_mean.shape[0], self.input_mean.shape[1])).to(device))
-        super().__init__(mix, self.components)
+        if self.components is not None:
+            super().__init__(mix, self.components)
 
     @property
     def components(self) -> Optional[D.Distribution]:
@@ -54,7 +55,7 @@ class MixtureDistribution(D.MixtureSameFamily):
             components = D.von_mises.VonMises(loc=angle, concentration=1 / torch.exp(self.input_logvar[..., -1]))
         else:
             components = None
-            ValueError(f"{encoder_distribution_type} not available")
+            # ValueError(f"{encoder_distribution_type} not available")
         self._components: Optional[D.Distribution] = components
 
     @property

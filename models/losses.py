@@ -3,7 +3,8 @@ import numpy as np
 from models.distributions import MixtureDistribution
 
 
-def matrix_dist(z_mean_next, z_mean_pred, latent_dim):
+def matrix_dist(z_mean_next, z_mean_pred):
+    latent_dim = z_mean_next.shape[-1]
     if latent_dim == 3:
         return ((z_mean_next.unsqueeze(2) - z_mean_pred.unsqueeze(1))**2).sum(-1).sum(-1)
     else:
