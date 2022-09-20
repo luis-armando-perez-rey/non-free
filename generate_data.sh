@@ -12,7 +12,7 @@ source activate gpytorch
 #python3 generate_data.py --n_examples 10000 --dataset_name 2 --n_arrows 2 --dataset rot-arrows
 #python3 generate_data.py --n_examples 10000 --dataset_name 3 --n_arrows 3 --dataset rot-arrows
 #python3 generate_data.py --n_examples 10000 --dataset_name 5 --n_arrows 5 --dataset rot-arrows
-python3 generate_data.py --n_examples 10 --n_arrows 1 --dataset symmetric_solids
+python3 generate_data.py --n_examples 10000 --n_arrows 1 --dataset_name cube --dataset symmetric_solids
 
 #python3 generate_data.py --n_examples 10000 --dataset_name 1 --n_arrows 1 --dataset square_translation
 #python3 generate_data.py --n_examples 2000 --dataset_name 1_c --n_arrows 1 --dataset arrows --colors "tab:red" "tab:green" "tab:purple" "tab:orange" "tab:blue"

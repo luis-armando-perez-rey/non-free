@@ -52,19 +52,21 @@ def save_tfds_data_as_npy(save_folder, shape_id, resolution: Tuple[int, int] = (
             np.ones(len(images)) * rotations_equivalent.shape[1])
 
 
-def generate_training_data(load_folder, shape_id: int, num_pairs: int, resolution: Tuple[int, int] = (64, 64)):
+def generate_training_data(load_folder, save_folder: str, dataset_name:str, shape_id: int, num_pairs: int,
+                           resolution: Tuple[int, int] = (64, 64)):
     save_tfds_data_as_npy(load_folder, shape_id, resolution)
-    dataset_name = str(int(shape_id))
-    loaded_images = np.load(os.path.join(load_folder, dataset_name + "_data.npy"))
-    loaded_rotations = np.load(os.path.join(load_folder, dataset_name + "_lbls.npy"))
+    load_dataset_name = str(int(shape_id))
+    loaded_images = np.load(os.path.join(load_folder, load_dataset_name + "_data.npy"))
+    loaded_rotations = np.load(os.path.join(load_folder, load_dataset_name + "_lbls.npy"))
+    rotations_equivalent = np.load(os.path.join(load_folder, load_dataset_name + '_rotation_stabilizers.npy'))
     images = []
     rotations = []
     for num_pair in range(num_pairs):
         print("Generating pair {}".format(num_pair))
         index1 = np.random.randint(0, len(loaded_images))
         index2 = np.random.randint(0, len(loaded_images))
-        image1 = loaded_images[index1]
-        image2 = loaded_images[index2]
+        image1 = np.transpose(loaded_images[index1], (2, 0, 1))/255
+        image2 = np.transpose(loaded_images[index2], (2, 0, 1))/255
         rotation1 = loaded_rotations[index1]
         rotation2 = loaded_rotations[index2]
         rotation_delta = rotation2 * np.linalg.inv(rotation1)
@@ -72,4 +74,14 @@ def generate_training_data(load_folder, shape_id: int, num_pairs: int, resolutio
         rotations.append(rotation_delta)
     images = np.array(images)
     rotations = np.array(rotations)
+    stabilizers = np.array(np.ones(len(images)) * rotations_equivalent.shape[1])
+    print(images.shape)
+    print(rotations.shape)
+    print(stabilizers)
+    np.save(os.path.join(save_folder, dataset_name + '_data.npy'), images)
+    # Save rotations
+    np.save(os.path.join(save_folder, dataset_name + '_lbls.npy'), rotations)
+    # Save number of stabilizers
+    np.save(os.path.join(save_folder, dataset_name + '_stabilizers.npy'), stabilizers)
+
     return images, rotations
