@@ -44,7 +44,7 @@ class ArrowCanvas:
     @staticmethod
     def get_mutation_scale(num_arrows):
         if num_arrows == 1:
-            return 200
+            return 100
         else:
             return 100
 
@@ -63,7 +63,7 @@ class ArrowCanvas:
                           arrowstyle=mpatches.ArrowStyle("fancy", head_length=0.5, head_width=0.5, tail_width=0.3))
         elif style == "wedge":
             params = dict(linewidth=0.0,
-                          arrowstyle=mpatches.ArrowStyle("wedge", head_length=0.5, tail_width=0.3))
+                          arrowstyle=mpatches.ArrowStyle("wedge", tail_width=0.3))
         elif style == "fork":
             params = dict(linewidth=10.0,
                           arrowstyle=mpatches.ArrowStyle("-[", widthB=0.2, lengthB=0.2))
@@ -222,12 +222,136 @@ def generate_eval_data(num_arrows_list, dataset_folder, dataset_name, style_list
     np.save(os.path.join(dataset_folder, dataset_name + '_eval_stabilizers.npy'), stabilizers)
 
 
-def generate_two_arrows(num_arrows_pairs, dataset_folder, dataset_name, style_combinations: Optional[List[str]] = None,
-                       color_pairs: Optional[List[str]] = None,
-                       total_rotations: int = 36, examples_per_pair: int = 100,
-                       resolution=(64, 64), multicolor=False):
-    num_combinations = len(num_arrows_pairs)
-    c1 = ArrowCanvas(resolution)
-    c1.add_arrows(0, num_arrows=3, color=AVAILABLE_TAB_COLORS[0], start_point=(0.5, 0.5), radius=0.5)
-    c1.add_arrows(0, num_arrows=4, color=AVAILABLE_TAB_COLORS[1], start_point=(-0.5, -0.5), radius=0.5)
-    c1.show()
+def generate_two_arrows_train(num_arrows_pairs, dataset_folder, dataset_name,
+                              color_pairs: Optional[List[str]] = None, style_pairs: Optional[List[str]] = None,
+                              examples_per_pair: int = 100,
+                              resolution=(64, 64)):
+    equiv_data = []
+    equiv_lbls = []
+    equiv_stabilizers = []
+    if not os.path.exists(dataset_folder):
+        os.makedirs(dataset_folder)
+    if style_pairs is None:
+        style_pairs = [["simple", "simple"]]
+    if color_pairs is None:
+        color_pairs = [["tab:red", "tab:red"]]
+
+    for num_pair, arrow_pair in enumerate(num_arrows_pairs):
+        for styles in style_pairs:
+            for colors in color_pairs:
+                for num_example in range(examples_per_pair):
+                    print(
+                        "Generating image with num arrows {}, style {}, color {}, num example {}".format(
+                            arrow_pair, styles, colors, num_example))
+
+                    # Generate image 1
+                    c1 = ArrowCanvas(resolution)
+                    angle_image1_arrow1 = 2 * np.pi * np.random.random()
+                    angle_image1_arrow2 = 2 * np.pi * np.random.random()
+                    # Add arrows
+                    c1.add_arrows(angle_image1_arrow1, num_arrows=arrow_pair[0], color=colors[0],
+                                  start_point=(0.5, 0.5), radius=0.5, style=styles[0])
+                    c1.add_arrows(angle_image1_arrow2, num_arrows=arrow_pair[1], color=colors[1],
+                                  start_point=(-0.5, -0.5), radius=0.5, style=styles[1])
+                    c1.show()
+                    # Generate image 2
+                    c2 = ArrowCanvas(resolution)
+                    angle_image2_arrow1 = 2 * np.pi * np.random.random()
+                    angle_image2_arrow2 = 2 * np.pi * np.random.random()
+                    # Add arrows
+                    c2.add_arrows(angle_image2_arrow1, num_arrows=arrow_pair[0], color=colors[0],
+                                  start_point=(0.5, 0.5), radius=0.5, style=styles[0])
+                    c2.add_arrows(angle_image2_arrow2, num_arrows=arrow_pair[1], color=colors[1],
+                                  start_point=(-0.5, -0.5), radius=0.5, style=styles[1])
+                    c2.show()
+
+                    # Get images
+                    img1 = c1.numpy_torch_img
+                    img2 = c2.numpy_torch_img
+
+                    # Get labels
+                    delta_arrow1 = angle_image2_arrow1 - angle_image1_arrow1
+                    delta_arrow2 = angle_image2_arrow2 - angle_image1_arrow2
+
+                    # Store data
+                    equiv_data.append([img1, img2])
+                    equiv_lbls.append([delta_arrow1, delta_arrow2])
+                    equiv_stabilizers.append([arrow_pair[0], arrow_pair[1]])
+
+                    plt.close("all")
+    equiv_data = np.array(equiv_data)
+    equiv_lbls = np.array(equiv_lbls)
+    equiv_stabilizers = np.array(equiv_stabilizers)
+    print("Equiv data shape", equiv_data.shape)
+    print("Equiv lbls shape", equiv_lbls.shape)
+    print("Equiv stabilizers shape", equiv_stabilizers.shape)
+
+    np.save(os.path.join(dataset_folder, dataset_name + '_data.npy'), equiv_data)
+    np.save(os.path.join(dataset_folder, dataset_name + '_lbls.npy'), equiv_lbls)
+    np.save(os.path.join(dataset_folder, dataset_name + '_stabilizers.npy'), equiv_stabilizers)
+
+
+def generate_two_arrows_eval(num_arrows_pairs, dataset_folder, dataset_name,
+                             color_pairs: Optional[List[str]] = None, style_pairs: Optional[List[str]] = None,
+                             total_rotations: int = 36,
+                             resolution=(64, 64)):
+    # if not os.path.exists(dataset_folder):
+    #     os.makedirs(dataset_folder)
+    if style_pairs is None:
+        style_pairs = [["simple", "simple"]]
+    if color_pairs is None:
+        color_pairs = [["tab:red", "tab:red"]]
+
+    # Regular dataset
+    images = []
+    stabilizers = []
+    labels = []
+
+    for num_pair, arrow_pair in enumerate(num_arrows_pairs):
+        for styles in style_pairs:
+            for colors in color_pairs:
+                images_per_object = []
+                labels_per_object = []
+                stabilizers_per_object = []
+                for num_angle1, angle1 in enumerate(2 * np.pi * np.linspace(0, 1, total_rotations)):
+                    for num_angle2, angle2 in enumerate(2 * np.pi * np.linspace(0, 1, total_rotations)):
+                        print(
+                            "Generating image with num arrows {}, style {}, color {}, num angle1 {} num angle 2 {}".format(
+                                arrow_pair, styles, colors, num_angle1, num_angle2))
+
+                        # Generate image 1
+                        c1 = ArrowCanvas(resolution)
+                        # Add arrows
+                        c1.add_arrows(angle1, num_arrows=arrow_pair[0], color=colors[0],
+                                      start_point=(0.5, 0.5), radius=0.5, style=styles[0])
+                        c1.add_arrows(angle2, num_arrows=arrow_pair[1], color=colors[1],
+                                      start_point=(-0.5, -0.5), radius=0.5, style=styles[1])
+                        c1.show()
+
+                        # Get images
+                        images_per_object.append(c1.numpy_torch_img)
+                        labels_per_object.append([angle1, angle2])
+                        stabilizers_per_object.append([arrow_pair[0], arrow_pair[1]])
+                        plt.close("all")
+
+                images.append(images_per_object)
+                stabilizers.append(stabilizers_per_object)
+                labels.append(labels_per_object)
+
+    images = np.array(images)
+    stabilizers = np.array(stabilizers)
+    labels = np.array(labels)
+    print("Images shape", images.shape)
+    print("Stabilizers shape", stabilizers.shape)
+    print("Labels shape", labels.shape)
+    np.save(os.path.join(dataset_folder, dataset_name + '_eval_data.npy'), images)
+    np.save(os.path.join(dataset_folder, dataset_name + '_eval_lbls.npy'), labels)
+    np.save(os.path.join(dataset_folder, dataset_name + '_eval_stabilizers.npy'), stabilizers)
+
+
+if __name__ == "__main__":
+    print("Generating dataset")
+    # generate_two_arrows_train([(3, 4)], "datasets", "two_arrows", total_rotations=36, examples_per_pair=1)
+
+    # generate_two_arrows_train([(1, 2)], "", "", examples_per_pair=10)
+    generate_two_arrows_eval([(1, 2)], "", "", total_rotations=10)

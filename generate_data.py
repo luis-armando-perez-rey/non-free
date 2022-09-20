@@ -1,8 +1,8 @@
 import argparse
-from dataset_generation.rotating_arrows import generate_training_data, generate_eval_data
+
 from dataset_generation.simple_sinusoidal import generate_dataset_sinusoidals, generate_dataset_regular_sinusoidals, \
     make_sinusoidal_image
-from dataset_generation import image_translation, dsprites_loader, symmetric_solids
+from dataset_generation import image_translation, dsprites_loader, symmetric_solids, rotating_arrows
 
 parser = argparse.ArgumentParser()
 # Dataset
@@ -12,6 +12,7 @@ parser.add_argument("--n_arrows", nargs="+", dest="n_arrows", type=int, default=
                     help="Number of arrows to generate in dataset")
 parser.add_argument("--n_examples", dest="n_examples", default=1000, type=int, help="Number of examples per num arrows")
 parser.add_argument('--multicolor', default=False, action='store_true')
+parser.add_argument('--split_data', type=str, default="all")
 parser.add_argument("--colors", nargs="+", dest="colors", type=str, default=["tab:red"])
 parser.add_argument('--styles', nargs='+', default=['simple'], type=str, help="Styles of the arrows")
 args = parser.parse_args()
@@ -25,8 +26,35 @@ def generate_dataset(dataset):
                                      )
         if args.multicolor:
             generation_parameters["multicolor"] = True
-        generate_training_data(**generation_parameters, examples_per_num_arrows=args.n_examples)
-        generate_eval_data(**generation_parameters)
+        if args.split_data == "all":
+            rotating_arrows.generate_training_data(**generation_parameters, examples_per_num_arrows=args.n_examples)
+            rotating_arrows.generate_eval_data(**generation_parameters)
+        elif args.split_data == "train":
+            rotating_arrows.generate_training_data(**generation_parameters, examples_per_num_arrows=args.n_examples)
+        elif args.split_data == "eval":
+            rotating_arrows.generate_eval_data(**generation_parameters)
+        else:
+            raise ValueError("Unknown split data")
+
+    elif dataset == "double_arrows":
+
+        generation_parameters = dict(num_arrows_pairs=[(args.n_arrows[0], args.n_arrows[1])], color_pairs=None,
+                                     style_pairs=None,
+                                     dataset_folder="./data/double_arrows",
+                                     dataset_name=args.dataset_name
+                                     )
+        if args.multicolor:
+            generation_parameters["multicolor"] = True
+        if args.split_data == "all":
+            rotating_arrows.generate_two_arrows_train(**generation_parameters, examples_per_pair=args.n_examples)
+            rotating_arrows.generate_two_arrows_eval(**generation_parameters)
+        elif args.split_data == "train":
+            rotating_arrows.generate_two_arrows_train(**generation_parameters, examples_per_pair=args.n_examples)
+        elif args.split_data == "eval":
+            rotating_arrows.generate_two_arrows_eval(**generation_parameters)
+        else:
+            raise ValueError("Unknown split data")
+
     elif dataset == 'sinusoidal':
         generation_parameters = dict(omega_list=args.n_arrows,
                                      dimension=100,

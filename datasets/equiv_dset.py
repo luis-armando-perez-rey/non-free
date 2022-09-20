@@ -65,7 +65,7 @@ class EvalDataset(torch.utils.data.Dataset):
         if os.path.isfile(path + list_dataset_names[0] + '_eval_lbls.npy'):
             self.lbls = np.load(path + list_dataset_names[0] + '_eval_lbls.npy', mmap_mode='r+')
         else:
-            self.lbsl = None
+            self.lbls = None
         for dataset_name in list_dataset_names[1:]:
             self.data = np.concatenate([self.data, np.load(path + dataset_name + '_eval_data.npy', mmap_mode='r+')],
                                        axis=0)
