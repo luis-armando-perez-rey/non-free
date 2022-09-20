@@ -142,7 +142,7 @@ def visualize_so3_probabilities(rotations,
     display_rotations = rotations @ canonical_rotation
     cmap = plt.cm.hsv
     scatterpoint_scaling = 4e3
-    eulers_queries = from_rotation_matrix(display_rotations.numpy())
+    eulers_queries = from_rotation_matrix(display_rotations)
     xyz = display_rotations[:, :, 0]
     tilt_angles = eulers_queries[:, 0]
 
@@ -191,5 +191,5 @@ def visualize_so3_probabilities(rotations,
         plt.text(0.5, 0.5, 'Tilt', fontsize=14,
                  horizontalalignment='center',
                  verticalalignment='center', transform=ax.transAxes)
-    plt.show()
+    # plt.show()
     return fig

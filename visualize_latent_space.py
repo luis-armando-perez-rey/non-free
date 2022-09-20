@@ -13,6 +13,7 @@ from utils.nn_utils import *
 # Import plotting utils
 from utils.plotting_utils import plot_extra_dims, plot_images_distributions, plot_embeddings_eval, \
     save_embeddings_on_circle, plot_images_reconstructions, plot_images_multi_reconstructions
+from utils.plotting_utils_so3 import visualize_so3_probabilities
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--save-folder', type=str, default='checkpoints', help='Path to saved model')
@@ -48,6 +49,10 @@ elif args.dataset == "sinusoidal":
 elif args.dataset == 'platonics':
     dset = PlatonicMerged(N=30000, data_dir=args.data_dir)
     stabilizers = None
+elif args.dataset == "symmetric_solids":
+    dset = EquivDatasetStabs(f'{args.data_dir}/symmetric_solids/', list_dataset_names=args.dataset_name)
+    stabilizers = None
+    eval_images = None
 else:
     eval_images = None
     stabilizers = None
@@ -66,6 +71,10 @@ if args.dataset == "arrows":
     mean_eval, logvar_eval, extra_eval = model(eval_images.to(device))
 elif args.dataset == "sinusoidal":
     img, img_next, action, n_stabilizers = next(iter(train_loader))
+    mean_eval, logvar_eval, extra_eval = model(eval_images.to(device))
+elif args.dataset == "symmetric_solids":
+    img, img_next, action, n_stabilizers = next(iter(train_loader))
+    eval_images = img
     mean_eval, logvar_eval, extra_eval = model(eval_images.to(device))
 elif args.dataset == "platonics":
     img, img_next, action = next(iter(train_loader))
@@ -121,8 +130,6 @@ if args.latent_dim == 2:
     print(extra.shape)
 
     action = action.detach().cpu().numpy()
-
-
 
     fig, ax = plot_extra_dims(extra, color_labels=n_stabilizers)
     if fig:
@@ -180,10 +187,18 @@ if args.latent_dim == 2:
 
 elif args.latent_dim == 3:
     for i in range(10):
-        plt.figure()
-        plt.imshow(npimages_eval[i])
-        plt.figure()
-        ax = plt.axes(projection='3d')
-        rots = R.from_dcm(mean[i]).as_rotvec()  # .as_euler('zxy', degrees=False)
-        ax.scatter3D(rots[:, 0], rots[:, 1], rots[:, 2], s=[30] * len(rots))
-        plt.show()
+        # plt.figure()
+        # plt.imshow(npimages_eval[i])
+        # plt.figure()
+        # ax = plt.axes(projection='3d')
+        # rots = R.from_dcm(mean[i]).as_rotvec()  # .as_euler('zxy', degrees=False)
+        # ax.scatter3D(rots[:, 0], rots[:, 1], rots[:, 2], s=[30] * len(rots))
+        # plt.show()
+        fig = plt.figure(figsize = (10,10))
+
+
+        ax = plt.subplot(121)
+        ax.imshow(npimages_eval[i])
+        ax = plt.subplot(122, projection='mollweide')
+        _ = visualize_so3_probabilities(mean[i], 0.05 * np.ones(len(mean[i])), ax=ax, fig=fig, show_color_wheel=True)
+        fig.savefig(os.path.join(save_folder, f"{i}.png"), bbox_inches='tight')
