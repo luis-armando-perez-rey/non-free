@@ -4,8 +4,13 @@ from models.distributions import MixtureDistribution
 
 
 def matrix_dist(z_mean_next, z_mean_pred):
-    return torch.sum((z_mean_next.unsqueeze(2) - z_mean_pred.unsqueeze(1)) ** 2,
-                     dim=tuple(np.arange(2, len(z_mean_next.shape))))
+    latent_dim = z_mean_next.shape[-1]
+    if latent_dim != 3:
+        loss = ((z_mean_pred.unsqueeze(1) - z_mean_next.unsqueeze(2)) ** 2).sum(-1)
+        return loss
+    else:
+        return ((z_mean_next.unsqueeze(2) - z_mean_pred.unsqueeze(1)) ** 2).sum(-1).sum(-1)
+    
 
 
 class EquivarianceLoss:
@@ -40,13 +45,35 @@ class EquivarianceLoss:
                                            p_next: MixtureDistribution):
                 mean = p.input_mean
                 mean_next = p_next.input_mean
+                if "chamfer_reg" not in self.kwargs:
+                    chamfer_reg = 0.001
+                else:
+                    chamfer_reg = self.kwargs["chamfer_reg"]
 
                 # loss = ((mean.unsqueeze(1) - mean_next.unsqueeze(2)) ** 2).sum(-1).min(dim=-1)[0].sum(
                 #     dim=-1).mean()
+
                 loss = matrix_dist(mean, mean_next).min(dim=-1)[0].sum(dim=-1).mean()
                 # reg = ((mean.unsqueeze(1) - mean.unsqueeze(2)) ** 2).sum(-1).mean()
-                reg = matrix_dist(mean, mean_next).mean()
-                loss += 0.001 * reg
+                reg = matrix_dist(mean, mean).mean()
+                loss += chamfer_reg * reg
+                return loss
+        elif loss_type == "chamfer2":
+            def equivariance_loss_function(p: MixtureDistribution,
+                                           p_next: MixtureDistribution):
+                mean = p.input_mean
+                mean_next = p_next.input_mean
+                if "chamfer_reg" not in self.kwargs:
+                    chamfer_reg = 0.001
+                else:
+                    chamfer_reg = self.kwargs["chamfer_reg"]
+
+                # loss = ((mean.unsqueeze(1) - mean_next.unsqueeze(2)) ** 2).sum(-1).min(dim=-1)[0].sum(
+                #     dim=-1).mean()
+                loss = matrix_dist(mean, mean_next).min(dim=-1)[0].mean()
+                # reg = ((mean.unsqueeze(1) - mean.unsqueeze(2)) ** 2).sum(-1).mean()
+                reg = matrix_dist(mean, mean).mean()
+                loss += chamfer_reg * reg
                 return loss
         elif loss_type == "euclidean":
             def equivariance_loss_function(p: MixtureDistribution,

@@ -33,6 +33,7 @@ def get_args():
 
     parser.add_argument('--data-dir', default='data', type=str)
     parser.add_argument('--equiv-loss', default="binary", type=str)
+    parser.add_argument('--chamfer-reg', default=0.0, type=float)
 
     parser.add_argument('--use-comet', default=False, action='store_true')
 
