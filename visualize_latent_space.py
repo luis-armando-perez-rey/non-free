@@ -101,6 +101,14 @@ logvar_eval = -4.6 * torch.ones(logvar_eval.shape).to(logvar_eval.device)
 std_eval = np.exp(logvar_eval.detach().cpu().numpy() / 2.) / 10
 
 
+
+s = torch.sin(action.squeeze(-1))
+c = torch.cos(action.squeeze(-1))
+rot = torch.stack([torch.stack([c, -s]), torch.stack([s, c])]).permute((2, 0, 1)).unsqueeze(1)
+
+mean_rot = (rot @ mean.unsqueeze(-1)).squeeze(-1)
+mean_rot = mean_rot.detach().cpu().numpy()
+
 mean = mean.detach().cpu().numpy()
 mean_next = mean_next.detach().cpu().numpy()
 std = np.exp(logvar.detach().cpu().numpy() / 2.) / 10
@@ -112,19 +120,12 @@ extra_dim = args.extra_dim
 
 save_folder = os.path.join(".", "visualizations", args.model_name)
 os.makedirs(save_folder, exist_ok=True)
+plt.axis('off')
 
 if args.latent_dim == 2:
-    s = torch.sin(action.squeeze(-1))
-    c = torch.cos(action.squeeze(-1))
-    rot = torch.stack([torch.stack([c, -s]), torch.stack([s, c])]).permute((2, 0, 1)).unsqueeze(1)
-    mean_rot = (rot @ mean.unsqueeze(-1)).squeeze(-1)
-    mean_rot = mean_rot.detach().cpu().numpy()
 
     print(extra.shape)
-
     action = action.detach().cpu().numpy()
-
-
 
     fig, ax = plot_extra_dims(extra, color_labels=n_stabilizers)
     if fig:

@@ -15,7 +15,7 @@ args = parser.parse_args()
 
 torch.cuda.empty_cache()
 
-torch.manual_seed(args.seed)
+# torch.manual_seed(args.seed)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print('Using device: ', device)
 
@@ -67,8 +67,12 @@ extra_dim = args.extra_dim  # the invariant component
 print("Using model", args.model)
 model = MDN(img_shape[0], args.latent_dim, N, extra_dim, model=args.model, normalize_extra=True).to(device)
 parameters = list(model.parameters())
+if args.latent_dim == 2:
+    dec_dim = 2*N
+elif args.latent_dim == 3:
+    dec_dim = 9*N
 if args.autoencoder != "None":
-    dec = Decoder(nc=img_shape[0], latent_dim=2, extra_dim=extra_dim, model=args.autoencoder).to(device)
+    dec = Decoder(nc=img_shape[0], latent_dim=dec_dim, extra_dim=extra_dim, model=args.autoencoder).to(device)
     parameters += list(dec.parameters())
     rec_loss_function = get_reconstruction_loss(args.reconstruction_loss)
 else:
@@ -84,7 +88,7 @@ else:
     ValueError(f"Optimizer {args.optimizer} not defined")
 
 errors = []
-
+errors_rec = []
 
 def make_rotation_matrix(action):
     s = torch.sin(action)
@@ -102,6 +106,7 @@ def matrix_dist(z_mean_next, z_mean_pred, latent_dim):
 
 def train(epoch, data_loader, mode='train'):
     mu_loss = 0
+    mu_rec_loss = 0
     global_step = len(data_loader) * epoch
 
     for batch_idx, (image, img_next, action) in enumerate(data_loader):
@@ -152,7 +157,7 @@ def train(epoch, data_loader, mode='train'):
             loss_equiv = matrix_dist(z_mean_next, z_mean_pred, args.latent_dim).min(dim=-1)[0].sum(
                 dim=-1).mean()  # Chamfer/Hausdorff loss
             if mode == "train":
-                reg = matrix_dist(z_mean_next, z_mean_pred, args.latent_dim).mean()
+                reg = matrix_dist(z_mean, z_mean, args.latent_dim).mean()
                 loss_equiv += 0.001*reg
         elif equiv_loss_type == "euclidean":
             loss_equiv = ((z_mean_pred - z_mean_next) ** 2).sum(-1).mean()
@@ -176,18 +181,19 @@ def train(epoch, data_loader, mode='train'):
             losses.append(loss_contra)
 
         # Reconstruction
-        reconstruction_loss = 0
+        reconstruction_loss = torch.tensor(0.)
         if args.autoencoder != "None":
-            if extra_dim > 0:
-                for n in range(N):
-                    x_rec = dec(torch.concat([z_mean[:, n], extra], dim=-1))
-                    x_next_rec = dec(torch.concat([z_mean_next[:, n], extra_next], dim=-1))
-            else:
-                for n in range(N):
-                    x_rec = dec(z_mean[:, n])
-                    x_next_rec = dec(z_mean_next[:, n])
+            # if extra_dim > 0:
+            #     for n in range(N):
+            #         x_rec = dec(torch.concat([z_mean[:, n], extra], dim=-1).detach())
+            #         x_next_rec = dec(torch.concat([z_mean_next[:, n], extra_next], dim=-1).detach())
+            # else:
+            #     for n in range(N):
+            #         x_rec = dec(z_mean[:, n].detach())
+            #         x_next_rec = dec(z_mean_next[:, n].detach())
+            x_rec = dec(torch.concat([z_mean.view((z_mean.shape[0], -1)), extra], dim=-1).detach())
             reconstruction_loss += rec_loss_function(x_rec, image).mean()
-            reconstruction_loss += rec_loss_function(x_next_rec, img_next).mean()
+            #reconstruction_loss += rec_loss_function(x_next_rec, img_next).mean() / 2.
             losses.append(reconstruction_loss)
 
         # Sum all losses
@@ -206,16 +212,20 @@ def train(epoch, data_loader, mode='train'):
                 f" {loss_equiv:.3} Loss reconstruction: {reconstruction_loss:.3}")
 
         mu_loss += loss.item()
+        mu_rec_loss += reconstruction_loss.item()
 
         if mode == 'train':
             loss.backward()
             optimizer.step()
 
     mu_loss /= len(data_loader)
+    mu_rec_loss /= len(data_loader)
 
     if mode == 'val':
         errors.append(mu_loss)
+        errors_rec.append(mu_rec_loss)
         np.save(f'{MODEL_PATH}/errors_val.npy', errors)
+        np.save(f'{MODEL_PATH}/errors_rec_val.npy', errors_rec)
 
         if (epoch % args.save_interval) == 0:
             save(model, model_file)
