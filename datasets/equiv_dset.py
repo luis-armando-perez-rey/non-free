@@ -40,13 +40,12 @@ class EquivDatasetStabs(EquivDataset):
     def __init__(self, path: str, list_dataset_names: List[str] = ["equiv"], greyscale: bool = False):
         super().__init__(path, list_dataset_names, greyscale)
         for dataset_name in list_dataset_names:
-            assert os.path.exists(
-                path + dataset_name[
-                    0] + '_stabilizers.npy'), f"{dataset_name}_stabilizers.npy cardinality file not found"
-        self.stabs = np.load(path + list_dataset_names[0] + '_stabilizers.npy', mmap_mode='r+')
-        for dataset_name in list_dataset_names[1:]:
-            self.stabs = np.concatenate([self.stabs, np.load(path + dataset_name + '_stabilizers.npy', mmap_mode='r+')],
-                                        axis=0)
+            assert os.path.isfile(os.path.join(path, dataset_name + '_stabilizers.npy')), f"{os.path.join(path, dataset_name + '_stabilizers.npy')}_stabilizers.npy cardinality file not found"
+            self.stabs = np.load(path + list_dataset_names[0] + '_stabilizers.npy', mmap_mode='r+')
+            for dataset_name in list_dataset_names[1:]:
+                self.stabs = np.concatenate(
+                    [self.stabs, np.load(path + dataset_name + '_stabilizers.npy', mmap_mode='r+')],
+                    axis=0)
 
     def __getitem__(self, index):
         if self.greyscale:
@@ -66,8 +65,9 @@ class EvalDataset(torch.utils.data.Dataset):
         for dataset_name in list_dataset_names[1:]:
             self.data = np.concatenate([self.data, np.load(path + dataset_name + '_eval_data.npy', mmap_mode='r+')],
                                        axis=0)
-            self.stabs = np.concatenate([self.stabs, np.load(path + dataset_name + '_eval_stabilizers.npy', mmap_mode='r+')],
-                                       axis=0)
+            self.stabs = np.concatenate(
+                [self.stabs, np.load(path + dataset_name + '_eval_stabilizers.npy', mmap_mode='r+')],
+                axis=0)
 
 
 def PlatonicMerged(N, big=True, data_dir='data'):
@@ -76,10 +76,10 @@ def PlatonicMerged(N, big=True, data_dir='data'):
     cube = PlatonicDataset('cube', N=N, big=big, data_dir=data_dir)
     return torch.utils.data.ConcatDataset([cube, octa, pyra])
 
+
 class PlatonicDataset(torch.utils.data.Dataset):
     def __init__(self, platonic, N, big=True, width=64, data_dir='data', logarithmic=False):
-
-        self.classes = {'cube':0, 'tetra':1, 'octa':2}
+        self.classes = {'cube': 0, 'tetra': 1, 'octa': 2}
         self.platonic = platonic
         self.logarithmic = logarithmic
 
@@ -99,7 +99,7 @@ class PlatonicDataset(torch.utils.data.Dataset):
 
         action = torch.from_numpy(action).float()
 
-        return img1, img2, action #torch.Tensor([self.classes[self.platonic]]).long()
+        return img1, img2, action  # torch.Tensor([self.classes[self.platonic]]).long()
 
     def __len__(self):
         return len(self.data)
