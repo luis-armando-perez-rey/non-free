@@ -157,8 +157,8 @@ def train(epoch, data_loader, mode='train'):
             # The predicted z_mean after applying the rotation corresponding to the action
             z_mean_pred = (rot @ z_mean.unsqueeze(-1).detach()).squeeze(-1)  # Beware the detach!!!
         elif args.latent_dim == 3:
-            z_mean_pred = action.unsqueeze(1) @ z_mean.detach()
-        elif args.latent_dim >= 3 and args.latent_dim % 2 == 0:
+            z_mean_pred = action @ z_mean.detach()
+        elif args.latent_dim > 3 and args.latent_dim % 2 == 0:
             action = action.squeeze(1)
             z_mean_pred = so2_rotate_subspaces(z_mean, action, detach=True)
         else:
@@ -264,7 +264,9 @@ def train(epoch, data_loader, mode='train'):
     if mode == 'val':
         errors.append(mu_loss)
         errors_rec.append(mu_rec_loss)
-        entropy.append(estimate_entropy(p, 1000).item())
+        # If the encoding distribution is not None
+        if p.components is not None:
+            entropy.append(estimate_entropy(p, 1000).item())
         if extra_dim > 0:
             invariant_loss.append(loss_identity.item())
             np.save(f'{model_path}/invariant_val.npy', invariant_loss)

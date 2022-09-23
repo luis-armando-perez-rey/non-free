@@ -84,8 +84,13 @@ def add_distribution_to_ax(mean, std, ax, n: int, title=None, color=None, dist_t
         colors = [color] * n
     if title is not None:
         ax.set_title(title)
+    if n > len(colors):
+        print(
+            f"WARNING: Not enough available colors {len(colors)} for each distribution location ({n} distributions used). Will repeat colors")
     for j in range(n):
-        ellipse_j = Ellipse(xy=(mean[j, 0], mean[j, 1]), width=std[j, 0], height=std[j, 1], color=colors[j],
+
+        ellipse_j = Ellipse(xy=(mean[j, 0], mean[j, 1]), width=std[j, 0], height=std[j, 1],
+                            color=colors[j % len(colors)],
                             linewidth=15, alpha=0.8)
         if dist_text is not None:
             ax.text(mean[j, 0], mean[j, 1], dist_text, color="k", fontsize=12)
@@ -234,8 +239,11 @@ def add_scatter_to_ax(mean, ax, color=None, size=120, marker="*", alpha=1.0):
         colors = AVAILABLE_TAB_COLORS
     else:
         colors = [color] * len(mean)
+    if len(mean) > len(colors):
+        print(
+            f"WARNING: Not enough available colors {len(colors)} for each point ({len(mean)} points). Will repeat colors")
     for j in range(len(mean)):
-        ax.scatter(mean[j, 0], mean[j, 1], marker=marker, s=size, alpha=alpha, color=colors[j])
+        ax.scatter(mean[j, 0], mean[j, 1], marker=marker, s=size, alpha=alpha, color=colors[j % len(colors)])
     return ax
 
 

@@ -80,7 +80,8 @@ def generate_dataset(dataset):
 
     elif dataset == "symmetric_solids":
         print("NOTICE: In symmetric_solids dataset n_arrows option corresponds to the number of the shape id. E.g. 0 "
-              "is ")
+              "corresponds to the tetrahedron 1 to the cube, etc. see "
+              "https://www.tensorflow.org/datasets/catalog/symmetric_solids for more info. ")
         symmetric_solids.generate_training_data("./data/symmetric_solids", "./data/symmetric_solids",
                                                 dataset_name=args.dataset_name,
                                                 shape_id=args.n_arrows[0], num_pairs=args.n_examples)

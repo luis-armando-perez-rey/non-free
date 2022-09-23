@@ -87,7 +87,7 @@ else:
     raise ValueError(f'Dataset {args.dataset} not supported')
 
 train_loader = torch.utils.data.DataLoader(dset,
-                                           batch_size=20, shuffle=True)
+                                           batch_size=100, shuffle=True)
 device = 'cpu'
 model = load(model_file).to(device)
 if args.autoencoder != 'None':
@@ -145,7 +145,6 @@ mean_next = mean_next.detach().cpu().numpy()
 std = np.exp(logvar.detach().cpu().numpy() / 2.) / 10
 std_next = np.exp(logvar_next.detach().cpu().numpy() / 2.) / 10
 
-
 if args.latent_dim == 2 or args.latent_dim == 4:
     if args.latent_dim == 2:
         action = action.squeeze(1)
@@ -169,6 +168,7 @@ if args.latent_dim == 2 or args.latent_dim == 4:
     # region PLOT ROTATED EMBEDDINGS
     for i in range(10):
         print(f"Plotting example {i}")
+        print(mean_numpy.shape)
         fig, axes = plot_images_distributions(mean=mean_numpy[i], std=std[i], mean_next=mean_next[i],
                                               std_next=std_next[i],
                                               image=npimages[i], image_next=npimages_next[i],
@@ -223,7 +223,7 @@ if args.latent_dim == 2 or args.latent_dim == 4:
         for i in range(len(x_rec)):
             add_image_to_ax(1 / (1 + np.exp(-x_rec[i])))
             plt.savefig(os.path.join(save_folder, f"reconstruction_{i}.png"), bbox_inches='tight')
-            add_image_to_ax(unique_images[i].permute((1,2,0)).detach().cpu().numpy())
+            add_image_to_ax(unique_images[i].permute((1, 2, 0)).detach().cpu().numpy())
             plt.savefig(os.path.join(save_folder, f"input_image_{i}.png"), bbox_inches='tight')
 
             # boolean_selection = (flat_stabilizers == unique)
@@ -264,8 +264,6 @@ if args.latent_dim == 2 or args.latent_dim == 4:
     reshaped_eval_actions_gaussians = repeat_angles_n_gaussians(eval_actions, N)
     reshaped_mean_eval = mean_eval.reshape(num_objects, -1, N, args.latent_dim)
     z_inv = apply_inverse_rotation(reshaped_mean_eval.detach().numpy(), reshaped_eval_actions_gaussians)
-
-
 
     # TODO: Clean this computation
     if args.latent_dim == 4:
@@ -315,21 +313,21 @@ elif args.latent_dim == 3:
         # rots = R.from_dcm(mean[i]).as_rotvec()  # .as_euler('zxy', degrees=False)
         # ax.scatter3D(rots[:, 0], rots[:, 1], rots[:, 2], s=[30] * len(rots))
         # plt.show()
-        fig = plt.figure(figsize = (10,10))
-
+        fig = plt.figure(figsize=(10, 10))
 
         ax = plt.subplot(121)
         ax.imshow(npimages_eval[i])
         ax = plt.subplot(122, projection='mollweide')
-        _ = visualize_so3_probabilities(mean[i], 0.05 * np.ones(len(mean[i])), ax=ax, fig=fig, show_color_wheel=True)
+        _ = visualize_so3_probabilities(mean[i].detach().numpy(), 0.05 * np.ones(len(mean[i])), ax=ax, fig=fig,
+                                        show_color_wheel=True)
         fig.savefig(os.path.join(save_folder, f"{i}.png"), bbox_inches='tight')
+        plt.close("all")
 
-
-        fig= plt.figure(figsize = (10,5))
+        fig = plt.figure(figsize=(10, 5))
         ax = plt.subplot(121)
         ax.imshow(npimages_eval[i])
         ax = plt.subplot(122, projection='3d')
-        rots = R.from_dcm(mean_numpy[i]).as_rotvec()  # .as_euler('zxy', degrees=False)
+        rots = R.from_matrix(mean_numpy[i]).as_rotvec()  # .as_euler('zxy', degrees=False)
         ax.scatter3D(rots[:, 0], rots[:, 1], rots[:, 2], s=[30] * len(rots))
-        fig.savefig(os.path.join(save_folder, f"euler_angles_{i}.png"), bbox_inches='tight')
-
+        fig.savefig(os.path.join(save_folder, f"rotvec_{i}.png"), bbox_inches='tight')
+        plt.close("all")
