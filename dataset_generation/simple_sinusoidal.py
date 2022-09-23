@@ -32,6 +32,22 @@ class SinusoidalData:
             sinusoidal += np.random.normal(0, noise_std, sinusoidal.shape)
         return sinusoidal
 
+
+def make_sinusoidal_image(omega1: int, omega2: int, resolution=(64, 64), n_channels = 1):
+    assert isinstance(omega1, int), "omega1 must be an integer"
+    assert isinstance(omega2, int), "omega2 must be an integer"
+    assert omega1 > 0, "omega1 must be a positive integer"
+    assert omega2 > 0, "omega2 must be a positive integer"
+
+    image = np.zeros((resolution[0], resolution[1], n_channels), dtype=np.float32)
+    for i in range(resolution[0]):
+        for j in range(resolution[1]):
+            image[i, j, 0] = (np.sin(
+                2 * np.pi * (omega1 / resolution[0] * i))
+                              + np.sin(2 * np.pi * omega2 / resolution[1] * j) + 1) / 2
+    return image
+
+
 def plot_sinusoidal(sinusoidal):
     domain_points = np.linspace(0, 1, sinusoidal.shape[-1]) * 2 * np.pi
     plt.plot(domain_points, sinusoidal)
@@ -68,7 +84,7 @@ def generate_dataset_sinusoidals(omega_list: List[int], dimension: int, dataset_
     np.save(os.path.join(dataset_folder, dataset_name + '_stabilizers.npy'), equiv_stabilizers)
 
 
-def generate_dataset_regular_sinusoidals(omega_list: List[int], dimension: int, num_angles:int, dataset_folder: str,
+def generate_dataset_regular_sinusoidals(omega_list: List[int], dimension: int, num_angles: int, dataset_folder: str,
                                          dataset_name: str):
     if not os.path.exists(dataset_folder):
         os.makedirs(dataset_folder)
@@ -91,3 +107,9 @@ def generate_dataset_regular_sinusoidals(omega_list: List[int], dimension: int, 
     np.save(os.path.join(dataset_folder, dataset_name + '_eval_data.npy'), equiv_data)
     np.save(os.path.join(dataset_folder, dataset_name + '_eval_stabilizers.npy'), equiv_stabilizers)
 
+
+if __name__ == "__main__":
+    # generate_dataset_sinusoidals([1, 2, 3, 4, 5], 100, "dataset_generation/datasets", "sinusoidals")
+    image = SinusoidalImage(1, 2, resolution=(64, 64)).generate_image()
+    plt.imshow(image[0])
+    plt.show()

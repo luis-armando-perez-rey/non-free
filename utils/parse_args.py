@@ -33,6 +33,7 @@ def get_args():
 
     parser.add_argument('--data-dir', default='data', type=str)
     parser.add_argument('--equiv-loss', default="binary", type=str)
+    parser.add_argument('--chamfer-reg', default=0.0, type=float)
 
     parser.add_argument('--use-comet', default=False, action='store_true')
 
@@ -45,7 +46,8 @@ def get_args():
     parser.add_argument('--reconstruction-loss', default="bernoulli", type=str,
                         help="Loss to be used for reconstruction")
     parser.add_argument("--prior-dist", default="None", type=str, help="Prior distribution to use")
-
+    parser.add_argument('--use-simplified', default=False, action='store_true',
+                        help="Use simplified model that uses single encoder network")
     # Plotting
     parser.add_argument("--plot", default=0, type=int, help="Number of epochs to ")
 

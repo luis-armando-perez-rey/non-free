@@ -108,8 +108,9 @@ def get_z_values(p: MixtureDistribution, extra: torch.tensor, n_samples: int, au
         z = None
         ValueError(f"Autoencoder type {autoencoder_type} not defined")
     # Do not change order! Append of extra dimension should be done after Von-Mises projection
-    if extra.shape[-1] > 0:
-        z = torch.cat([z, extra.unsqueeze(1).repeat(1, z.shape[1], 1)], dim=-1)
+    if extra is not None:
+        extra_repeated = extra.unsqueeze(1).repeat(1, z.shape[1], 1)
+        z = torch.cat([z, extra_repeated], dim=-1)
     return z
 
 

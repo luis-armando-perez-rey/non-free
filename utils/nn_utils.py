@@ -1,6 +1,7 @@
 import os
 import numpy as np
 import torch
+from typing import List
 
 pi = torch.tensor(np.pi)
 
@@ -62,3 +63,24 @@ def antisym_matrix(z):
     res[..., 2, 0] = -z[..., 1]
     res[..., 2, 1] = -z[..., 2]
     return res
+
+
+def so2_rotate_subspaces(embedding, action, detach=True):
+    """
+    Rotates the embeddings z\in Z_G according to action, Z_G = Z_1\times \cdots \times Z_N.
+    Considers that each subspace Z_i = S^1\subseteq R^2 and rotates it by the angle in action[..., i].
+    :param embedding: Embeddings with shape (batch_size, sum(n_distributions_per_subspace), 2)
+    :param action: Action with shape (batch_size, len(n_distributions_per_subspace))
+    :return:
+    """
+    number_of_subspaces = action.shape[-1]
+    if detach:
+        embedding_space = torch.clone(embedding).detach()
+    else:
+        embedding_space = torch.clone(embedding)
+    for num_subspace in range(number_of_subspaces):
+        rot = make_rotation_matrix(action[:, num_subspace])
+        embedding_subspace = embedding_space[:, :, num_subspace * 2:(num_subspace + 1) * 2]
+        embedding_space[:, :, num_subspace * 2: (num_subspace + 1) * 2] = (
+                rot @ embedding_subspace.unsqueeze(-1)).squeeze(-1)
+    return embedding_space
