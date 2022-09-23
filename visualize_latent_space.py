@@ -1,5 +1,5 @@
 import argparse
-import pickle
+import json
 from scipy.spatial.transform import Rotation as R
 
 import matplotlib.pyplot as plt
@@ -12,8 +12,12 @@ from utils.nn_utils import *
 
 # Import plotting utils
 from utils.plotting_utils import plot_extra_dims, plot_images_distributions, plot_embeddings_eval, \
-    save_embeddings_on_circle, plot_images_reconstructions, plot_images_multi_reconstructions, load_plot_val_errors, \
-    plot_embeddings_eval_torus, yiq_embedding
+    save_embeddings_on_circle, plot_images_multi_reconstructions, load_plot_val_errors, \
+    plot_embeddings_eval_torus, yiq_embedding, plot_mixture_neurreps, add_image_to_ax, add_distribution_to_ax_torus
+from utils.disentanglement_metric import dlsbd_metric_mixture, repeat_angles_n_gaussians, apply_inverse_rotation, \
+    estimate_mean_inv, estimate_kmeans_inv
+
+from models.losses import ReconstructionLoss
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--save-folder', type=str, default='checkpoints', help='Path to saved model')
@@ -36,26 +40,45 @@ os.makedirs(save_folder, exist_ok=True)
 print(args)
 if args.dataset == 'square':
     dset = EquivDataset(f'{args.data_dir}/square/', list_dataset_names=args.dataset_name)
+    flat_stabilizers = None
     stabilizers = None
     eval_images = None
 elif args.dataset == 'platonics':
     dset = PlatonicMerged(N=30000, data_dir=args.data_dir)
-    stabilizers = None
+    flat_stabilizers = None
 elif args.dataset == "arrows" or args.dataset == "sinusoidal":
     dset = EquivDatasetStabs(f'{args.data_dir}/{args.dataset}/', list_dataset_names=args.dataset_name)
     dset_eval = EvalDataset(f'{args.data_dir}/{args.dataset}/', list_dataset_names=args.dataset_name)
+    num_objects = dset_eval.data.shape[0]
     eval_images = torch.FloatTensor(dset_eval.data.reshape(-1, *dset_eval.data.shape[2:]))
-    stabilizers = dset_eval.stabs.reshape((-1))
+    stabilizers = dset_eval.stabs
+    flat_stabilizers = dset_eval.stabs.reshape((-1))
+    flat_eval_actions = dset_eval.lbls.reshape((-1))
+    eval_actions = dset_eval.lbls
 
 elif args.dataset.endswith("translation"):
     dset = EquivDatasetStabs(f'{args.data_dir}/{args.dataset}/', list_dataset_names=args.dataset_name)
     dset_eval = EvalDataset(f'{args.data_dir}/{args.dataset}/', list_dataset_names=args.dataset_name)
     eval_images = torch.FloatTensor(dset_eval.data.reshape(-1, *dset_eval.data.shape[2:]))
-    stabilizers = dset_eval.stabs.reshape((-1))
-    eval_actions = dset_eval.lbls.reshape((-1, 2))
+    num_objects = dset_eval.data.shape[0]
+    stabilizers = dset_eval.stabs
+    flat_stabilizers = dset_eval.stabs.reshape((-1, 2))
+    flat_eval_actions = dset_eval.lbls.reshape((-1, 2))
+    eval_actions = dset_eval.lbls
+    print("Number of objects", num_objects)
+elif args.dataset == "double_arrows":
+    dset = EquivDatasetStabs(f'{args.data_dir}/{args.dataset}/', list_dataset_names=args.dataset_name)
+    dset_eval = EvalDataset(f'{args.data_dir}/{args.dataset}/', list_dataset_names=args.dataset_name)
+    eval_images = torch.FloatTensor(dset_eval.data.reshape(-1, *dset_eval.data.shape[2:]))
+    num_objects = dset_eval.data.shape[0]
+    stabilizers = dset_eval.stabs
+    flat_stabilizers = dset_eval.stabs.reshape((-1, 2))
+    flat_eval_actions = dset_eval.lbls.reshape((-1, 2))
+    eval_actions = dset_eval.lbls
+    print("Number of objects", num_objects)
 else:
     eval_images = None
-    stabilizers = None
+    flat_stabilizers = None
     raise ValueError(f'Dataset {args.dataset} not supported')
 
 train_loader = torch.utils.data.DataLoader(dset,
@@ -66,7 +89,8 @@ if args.autoencoder != 'None':
     decoder = load(decoder_file).to(device)
 model.eval()
 
-if args.dataset == "arrows" or args.dataset == "sinusoidal" or args.dataset.endswith("translation"):
+if args.dataset == "arrows" or args.dataset == "sinusoidal" or args.dataset.endswith(
+        "translation") or args.dataset == "double_arrows":
     img, img_next, action, n_stabilizers = next(iter(train_loader))
     print("EVAL IMAGES SHAPE", eval_images.shape)
     mean_eval, logvar_eval, extra_eval = model(eval_images.to(device))
@@ -86,7 +110,7 @@ else:
 
 # Plot the training evaluation
 fig, _ = load_plot_val_errors(os.path.join(model_dir, "errors_val.npy"))
-fig.savefig(os.path.join(save_folder, 'invariant.png'))
+fig.savefig(os.path.join(save_folder, 'erros_val.png'))
 
 img_shape = np.array(img.shape[1:])
 if img.dim() == 2:
@@ -111,10 +135,11 @@ mean_numpy = mean.detach().cpu().numpy()
 mean_next = mean_next.detach().cpu().numpy()
 std = np.exp(logvar.detach().cpu().numpy() / 2.) / 10
 std_next = np.exp(logvar_next.detach().cpu().numpy() / 2.) / 10
-extra = extra.detach().cpu().numpy()
+
 
 if args.latent_dim == 2 or args.latent_dim == 4:
     if args.latent_dim == 2:
+        action = action.squeeze(1)
         rot = make_rotation_matrix(action)
         mean_rot = (rot @ mean.unsqueeze(-1)).squeeze(-1)
         mean_rot = mean_rot.detach().cpu().numpy()
@@ -122,14 +147,14 @@ if args.latent_dim == 2 or args.latent_dim == 4:
         action = action.squeeze(1)
         mean_rot = so2_rotate_subspaces(mean, action, detach=True)
 
-    print(extra.shape)
-
     action = action.detach().cpu().numpy()
 
+    # TODO: Review plot identity embeddings code
     # region PLOT IDENTITY EMBEDDINGS
-    fig, ax = plot_extra_dims(extra, color_labels=n_stabilizers)
-    if fig:
-        fig.savefig(os.path.join(save_folder, 'invariant.png'))
+    # if (args.latent_dim != 4) and (args.extra_dim > 0) :
+    #     fig, ax = plot_extra_dims(extra, color_labels=flat_stabilizers)
+    #     if fig:
+    #         fig.savefig(os.path.join(save_folder, 'invariant.png'))
     # endregion
 
     # region PLOT ROTATED EMBEDDINGS
@@ -139,55 +164,137 @@ if args.latent_dim == 2 or args.latent_dim == 4:
                                               std_next=std_next[i],
                                               image=npimages[i], image_next=npimages_next[i],
                                               expected_mean=mean_rot[i], n=N)
-        fig.savefig(os.path.join(save_folder, f"test_{i}.png"), bbox_inches='tight')
-        plt.close("all")
-    # endregion
-    # Save the plots of the embeddings on the circle
-    # save_embeddings_on_circle(mean_eval, std_eval, stabilizers, save_folder, args.dataset_name[0])
+        plt.savefig(os.path.join(save_folder, f"image_pair_{i}.png"), bbox_inches='tight')
+        plot_mixture_neurreps(mean_numpy[i])
+        plt.savefig(os.path.join(save_folder, f"test_mixture_{i}.png"), bbox_inches='tight')
+        add_image_to_ax(npimages[i])
+        plt.savefig(os.path.join(save_folder, f"test_image_{i}.png"), bbox_inches='tight')
+        if args.latent_dim == 4:
+            fig, ax = plt.subplots(1, 1, figsize=(5, 5))
+            ax = add_distribution_to_ax_torus(mean_numpy[i], std[i], ax, n=N, color="r", scatter=True)
+            ax.set_xlim([-np.pi, np.pi])
+            ax.set_ylim([-np.pi, np.pi])
+            ax.set_xticks([])
+            ax.set_yticks([])
 
-    # # region PLOT EVALUATION DATASET EMBEDDINGS
-    # for num_unique, unique in enumerate(np.unique(stabilizers)):
-    #     boolean_selection = (stabilizers == unique)
-    #     if args.dataset_name[0].endswith("m"):
-    #         print("Plotting stabilizers equal to 1")
-    #         plot_stabilizers = np.ones_like(stabilizers[boolean_selection])
-    #     else:
-    #         plot_stabilizers = stabilizers[boolean_selection]
-    #
-    #     fig, axes = plot_embeddings_eval(mean_eval[boolean_selection], std_eval[boolean_selection], N,
-    #                                      plot_stabilizers, increasing_radius=True)
-    #     axes.set_title(f"Target stabilizers = {unique}")
-    #     fig.savefig(os.path.join(save_folder, f"{unique}_eval_radius.png"), bbox_inches='tight')
+            plt.savefig(os.path.join(save_folder, f"test_mixture_{i}.png"), bbox_inches='tight')
+            add_image_to_ax(npimages[i])
+            plt.savefig(os.path.join(save_folder, f"test_image_{i}.png"), bbox_inches='tight')
+
+        # fig.savefig(os.path.join(save_folder, f"test_{i}.png"), bbox_inches='tight')
+        plt.close("all")
     # # endregion
-
-    # region PLOT ON THE TORUS
-    if args.latent_dim == 4:
-        print("EVAL ACTIONS SHAPE", eval_actions.shape)
-        colors = yiq_embedding(eval_actions[:, 0], eval_actions[:, 1])
-        print("COLORS SHAPE", colors.shape)
-        fig, ax = plot_embeddings_eval_torus(mean_eval.detach().numpy(), colors)
-        fig.savefig(os.path.join(save_folder, f"torus_eval_embedings.png"), bbox_inches='tight')
-        plt.close("all")
+    # # Save the plots of the embeddings on the circle
+    # save_embeddings_on_circle(mean_eval, std_eval, flat_stabilizers, save_folder, args.dataset_name[0],
+    #                           increasing_radius=False)
+    #
+    # save_embeddings_on_circle(mean_eval, std_eval, flat_stabilizers, save_folder, args.dataset_name[0],
+    #                           increasing_radius=True)
+    #
+    # # region PLOT ON THE TORUS
+    # if args.latent_dim == 4:
+    #     print("EVAL ACTIONS SHAPE", flat_eval_actions.shape)
+    #     colors = yiq_embedding(flat_eval_actions[:, 0], flat_eval_actions[:, 1])
+    #     fig, ax = plot_embeddings_eval_torus(mean_eval.detach().numpy(), colors)
+    #     fig.savefig(os.path.join(save_folder, f"torus_eval_embedings.png"), bbox_inches='tight')
+    #     plt.close("all")
     # endregion
 
+    # TODO: Improve reconstruction code
+    unique_images = []
+    for unique in np.unique(dset.stabs):
+        unique_images.append(dset.data[dset.stabs == unique][0][0])
+
+    unique_images = torch.tensor(np.array(unique_images), dtype=img.dtype).to(device)
+    unique_mean, unique_logvar, unique_extra = model(unique_images)
     # region PLOT RECONSTRUCTIONS
     if args.autoencoder != "None":
-        reconstructions = []
+        x_rec = decoder(torch.cat([unique_mean.view((unique_mean.shape[0], -1)), unique_extra], dim=-1))
+        x_rec = x_rec.permute((0, 2, 3, 1)).detach().cpu().numpy()
+        for i in range(len(x_rec)):
+            add_image_to_ax(1 / (1 + np.exp(-x_rec[i])))
+            plt.savefig(os.path.join(save_folder, f"reconstruction_{i}.png"), bbox_inches='tight')
+            add_image_to_ax(unique_images[i].permute((1,2,0)).detach().cpu().numpy())
+            plt.savefig(os.path.join(save_folder, f"input_image_{i}.png"), bbox_inches='tight')
 
-        for n in range(N):
-            if args.extra_dim > 0:
-                x_rec = decoder(torch.concat([mean_eval[:, n], extra_eval], dim=-1))
-            else:
-                x_rec = decoder(mean_eval[:, n])
-            x_rec = torch.permute(x_rec, (0, 2, 3, 1))
-            reconstructions.append(x_rec)
-        reconstructions = torch.stack(reconstructions, dim=1)
-        reconstructions_np = reconstructions.detach().cpu().numpy()
-        for num_unique, unique in enumerate(np.unique(stabilizers)):
-            boolean_selection = (stabilizers == unique)
-            fig, _ = plot_images_multi_reconstructions(npimages_eval[boolean_selection][:5],
-                                                       reconstructions_np[boolean_selection][:5])
-            fig.savefig(os.path.join(save_folder, f"{unique}_reconstructions.png"), bbox_inches='tight')
+            # boolean_selection = (flat_stabilizers == unique)
+            # fig, _ = plot_images_multi_reconstructions(npimages_eval[boolean_selection][:5],
+            #                                            reconstructions_np[boolean_selection][:5])
+            # fig.savefig(os.path.join(save_folder, f"{unique}_reconstructions.png"), bbox_inches='tight')
+    # endregion
+
+    # TODO Fix latent traversal
+    # region LATENT TRAVERSAL
+    # num_points_traversal = 10
+    # if args.autoencoder != "None":
+    #     angles_traversal = np.linspace(0, 2 * np.pi, num_points_traversal, endpoint=False)
+    #     mean_traversal = torch.tensor(np.stack([np.cos(angles_traversal), np.sin(angles_traversal)], axis=-1))
+    #     if args.extra_dim > 0:
+    #
+    #         print(extra_eval.shape)
+    #         mean_extra = extra_eval.mean(dim=0)
+    #         print(mean_extra.shape)
+    #         mean_extra = mean_extra.unsqueeze(0)
+    #         print(mean_extra.shape)
+    #         mean_extra = mean_extra.repeat((num_points_traversal,1), 0)
+    #         # mean_extra = mean_extra.repeat(num_points_traversal, 0)
+    #         z = torch.cat([mean_traversal, mean_extra], dim=-1).float()
+    #         print(z.shape, mean_traversal.shape, mean_extra.shape)
+    #         x_rec = decoder(z)
+    #     else:
+    #         x_rec = decoder(mean_traversal)
+    #     fig, axes = plt.subplots(1, num_points_traversal, figsize=(num_points_traversal, 1))
+    #     for i in range(num_points_traversal):
+    #         axes[i].imshow(x_rec[i].permute((1, 2, 0)).detach().cpu().numpy())
+    #         axes[i].axis('off')
+    #     fig.savefig(os.path.join(save_folder, f"traversal.png"), bbox_inches='tight')
+    # endregion
+
+    # region ESTIMATE DLSBD METRIC
+    print("Estimating DLSBD metric")
+    reshaped_eval_actions_gaussians = repeat_angles_n_gaussians(eval_actions, N)
+    reshaped_mean_eval = mean_eval.reshape(num_objects, -1, N, args.latent_dim)
+    z_inv = apply_inverse_rotation(reshaped_mean_eval.detach().numpy(), reshaped_eval_actions_gaussians)
+
+
+
+    # TODO: Clean this computation
+    if args.latent_dim == 4:
+        reshaped_eval_actions = flat_eval_actions.reshape(num_objects, -1, 2)
+        fig, axes = plt.subplots(1, 2, figsize=(10, 5))
+        for num_subspace in range(2):
+            mean_subspace = (mean_eval[..., num_subspace * 2: (num_subspace + 1) * 2]).reshape((-1, 2))
+            z_inv_subspace = (z_inv[..., num_subspace * 2: (num_subspace + 1) * 2]).reshape((-1, 2))
+            axes[num_subspace].scatter(mean_subspace[:, 0].detach().numpy(), mean_subspace[:, 1].detach().numpy())
+            axes[num_subspace].scatter(z_inv_subspace[:, 0], z_inv_subspace[:, 1], marker="*")
+            for num_object in range(num_objects):
+                z_inv_mean = estimate_kmeans_inv(z_inv, stabilizers[num_object, 0, :])
+                z_mean_inv_subspace = z_inv_mean[num_subspace]
+                axes[num_subspace].scatter(z_mean_inv_subspace[:, 0], z_mean_inv_subspace[:, 1], marker="*", c="r")
+            axes[num_subspace].set_title(f"Subspace {num_subspace}")
+
+    else:
+        reshaped_eval_actions = flat_eval_actions.reshape(num_objects, -1)
+        fig = plt.figure()
+        mean_eval_flat = mean_eval.reshape((-1, args.latent_dim))
+        plt.scatter(mean_eval_flat[:, 0].detach().numpy(), mean_eval_flat[:, 1].detach().numpy())
+        z_inv_flat = z_inv.reshape((-1, args.latent_dim))
+        plt.scatter(z_inv_flat[:, 0], z_inv_flat[:, 1], marker="*")
+        for num_object in range(num_objects):
+            z_inv_mean = estimate_kmeans_inv(z_inv, stabilizers[num_object, 0])[0]
+            plt.scatter(z_inv_mean[:, 0], z_inv_mean[:, 1], marker="*", c="r")
+
+    plt.savefig(os.path.join(save_folder, f"z_inv.png"), bbox_inches='tight')
+    dlsbd = dlsbd_metric_mixture(reshaped_mean_eval.detach().numpy(), reshaped_eval_actions, stabilizers[:, 0], False,
+                                 distance_function="chamfer")
+    dlsbd = np.mean(dlsbd)
+    print("DLSBD METRIC!!!",
+          dlsbd_metric_mixture(reshaped_mean_eval.detach().numpy(), reshaped_eval_actions, stabilizers[:, 0], True,
+                               distance_function="chamfer"))
+    np.save(os.path.join(save_folder, f"dlsbd.npy"), dlsbd)
+
+    with open(os.path.join(save_folder, "metrics.json"), "w") as f:
+        json.dump({"dlsbd": dlsbd}, f)
     # endregion
 
 elif args.latent_dim == 3:
