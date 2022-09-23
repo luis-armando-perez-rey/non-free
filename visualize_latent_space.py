@@ -119,7 +119,7 @@ else:
 
 # Plot the training evaluation
 fig, _ = load_plot_val_errors(os.path.join(model_dir, "errors_val.npy"))
-fig.savefig(os.path.join(save_folder, 'erros_val.png'))
+fig.savefig(os.path.join(save_folder, 'errors_val.png'))
 
 img_shape = np.array(img.shape[1:])
 if img.dim() == 2:
@@ -313,21 +313,39 @@ elif args.latent_dim == 3:
         # rots = R.from_dcm(mean[i]).as_rotvec()  # .as_euler('zxy', degrees=False)
         # ax.scatter3D(rots[:, 0], rots[:, 1], rots[:, 2], s=[30] * len(rots))
         # plt.show()
+
+        mean_rot = (action @ mean).detach().cpu().numpy()
         fig = plt.figure(figsize=(10, 10))
 
-        ax = plt.subplot(121)
-        ax.imshow(npimages_eval[i])
-        ax = plt.subplot(122, projection='mollweide')
-        _ = visualize_so3_probabilities(mean[i].detach().numpy(), 0.05 * np.ones(len(mean[i])), ax=ax, fig=fig,
+        ax = plt.subplot(221)
+        ax.imshow(npimages[i])
+        ax = plt.subplot(222)
+        ax.imshow(npimages_next[i])
+        ax = plt.subplot(223, projection='mollweide')
+
+        _ = visualize_so3_probabilities(mean_numpy[i], 0.05 * np.ones(len(mean_numpy[i])), ax=ax, fig=fig,
+                                        show_color_wheel=True)
+        ax = plt.subplot(224, projection='mollweide')
+        _ = visualize_so3_probabilities(mean_next[i], 0.05 * np.ones(len(mean_next[i])), ax=ax, fig=fig,
+                                        rotations_gt = mean_rot[i],
                                         show_color_wheel=True)
         fig.savefig(os.path.join(save_folder, f"{i}.png"), bbox_inches='tight')
         plt.close("all")
 
-        fig = plt.figure(figsize=(10, 5))
-        ax = plt.subplot(121)
-        ax.imshow(npimages_eval[i])
-        ax = plt.subplot(122, projection='3d')
+        fig = plt.figure(figsize=(10, 10))
+        ax = plt.subplot(221)
+        ax.imshow(npimages[i])
+        ax = plt.subplot(222)
+        ax.imshow(npimages_next[i])
+        ax = plt.subplot(223, projection='3d')
         rots = R.from_matrix(mean_numpy[i]).as_rotvec()  # .as_euler('zxy', degrees=False)
         ax.scatter3D(rots[:, 0], rots[:, 1], rots[:, 2], s=[30] * len(rots))
+        ax = plt.subplot(224, projection='3d')
+        rots = R.from_matrix(mean_next[i]).as_rotvec()  # .as_euler('zxy', degrees=False)
+        ax.scatter3D(rots[:, 0], rots[:, 1], rots[:, 2], s=[30] * len(rots))
+        rots = R.from_matrix(mean_rot[i]).as_rotvec()  # .as_euler('zxy', degrees=False)
+        ax.scatter3D(rots[:, 0], rots[:, 1], rots[:, 2], s=[30] * len(rots), marker="*")
+
+
         fig.savefig(os.path.join(save_folder, f"rotvec_{i}.png"), bbox_inches='tight')
         plt.close("all")

@@ -71,7 +71,7 @@ class TorusEncode(nn.Module):
 
 class SO3Encode(nn.Module):
     """
-        Module that outputs the location and scale parameters of a Gaussian distribution over SO(3)
+        Module that outputs the location and scale parameters of a 'Gaussian' distribution over SO(3)
     """
 
     def __init__(self, n_gaussians):
