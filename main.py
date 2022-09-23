@@ -20,7 +20,7 @@ print(args)
 # region TORCH SETUP
 # Print set up torch device, empty cache and set random seed
 torch.cuda.empty_cache()
-torch.manual_seed(args.seed)
+# torch.manual_seed(args.seed)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print('Using device: ', device)
 # endregion
@@ -72,10 +72,18 @@ if args.use_simplified:
 else:
     model = MDN(img_shape[0], args.latent_dim, N, extra_dim, model=args.model, normalize_extra=True).to(device)
 parameters = list(model.parameters())
+
+if args.latent_dim == 2:
+    dec_dim = 2 * N
+elif args.latent_dim == 3:
+    dec_dim = 9 * N
+elif args.latent_dim == 4:
+    dec_dim = 4 * N
+
+
 if (args.autoencoder != "None") & (args.decoder != "None"):
-    dec = Decoder(nc=img_shape[0], latent_dim=args.latent_dim, extra_dim=extra_dim,
-                  model=args.decoder).to(
-        device)
+    dec = Decoder(nc=img_shape[0], latent_dim=dec_dim, extra_dim=extra_dim, model=args.decoder).to(device)
+
     parameters += list(dec.parameters())
     rec_loss_function = ReconstructionLoss(args.reconstruction_loss)
 else:
@@ -84,7 +92,10 @@ else:
 
 optimizer = get_optimizer(args.optimizer, args.lr, parameters)
 errors = []
+errors_rec = []
 entropy = []
+reconstruction_errors = []
+invariant_loss = []
 
 # region LOSS FUNCTIONS
 identity_loss_function = IdentityLoss(args.identity_loss, temperature=args.tau)
@@ -103,6 +114,7 @@ def matrix_dist(z_mean_next, z_mean_pred, latent_dim):
 
 def train(epoch, data_loader, mode='train'):
     mu_loss = 0
+    mu_rec_loss = 0
     global_step = len(data_loader) * epoch
 
     # Chamfer distance is used for validation
@@ -156,7 +168,7 @@ def train(epoch, data_loader, mode='train'):
         p = MixtureDistribution(z_mean, z_logvar, args.enc_dist)
         p_next = MixtureDistribution(z_mean_next, z_logvar_next, args.enc_dist)
         p_pred = MixtureDistribution(z_mean_pred, z_logvar, args.enc_dist)
-        loss_equiv = equiv_loss_function(p_pred, p_next)
+        loss_equiv = equiv_loss_function(p_next, p_pred)
         losses = [loss_equiv]
 
         # region CALCULATE IDENTITY LOSS
@@ -166,17 +178,22 @@ def train(epoch, data_loader, mode='train'):
         # endregion
 
         # region CALCULATE RECONSTRUCTION LOSS
-        reconstruction_loss = 0
+        reconstruction_loss = torch.tensor(0, dtype=image.dtype).to(device)
         if args.autoencoder != "None":
-            # Get latent variables
-            z = get_z_values(p, extra, args.num, args.autoencoder)
-            z_next = get_z_values(p_next, extra_next, args.num, args.autoencoder)
-            # Calculate reconstruction loss for each of the latent representations
-            for n in range(args.num):
-                x_rec = dec(z[:, n])
-                x_next_rec = dec(z_next[:, n])
-                reconstruction_loss += rec_loss_function(x_rec, image).mean()
-                reconstruction_loss += rec_loss_function(x_next_rec, img_next).mean()
+            # TODO: Keep this part of the code in case we are interested on single latent decoding
+            # # Get latent variables
+            # z = get_z_values(p, extra, args.num, args.autoencoder)
+            # z_next = get_z_values(p_next, extra_next, args.num, args.autoencoder)
+            # # Make the extra dimension invariant
+            # z_next[..., -extra_dim:] = z[..., -extra_dim:]
+            # # Calculate reconstruction loss for each of the latent representations
+            # for n in range(args.num):
+            #     x_rec = dec(z[:, n])
+            #     x_next_rec = dec(z_next[:, n])
+            #     reconstruction_loss += rec_loss_function(x_rec, image).mean()
+            #     reconstruction_loss += rec_loss_function(x_next_rec, img_next).mean()
+            x_rec = dec(torch.cat([z_mean.view((z_mean.shape[0], -1)), extra], dim=-1).detach())
+            reconstruction_loss += rec_loss_function(x_rec, image).mean()
             losses.append(reconstruction_loss)
         # endregion
 
@@ -198,32 +215,62 @@ def train(epoch, data_loader, mode='train'):
         # region LOGGING LOSS
         # Print loss progress
         if args.autoencoder == "None":
-            print(
-                f"{mode.upper()} Epoch: {epoch}, Batch: {batch_idx} of {len(data_loader)} Loss: {loss:.3f} Loss equiv:"
-                f" {loss_equiv:.3}")
+            if extra_dim > 0:
+                print(f"Epoch: {epoch} , Batch: {batch_idx} of {len(data_loader)} "
+                      f"Loss: {loss:.3f}"
+                      f"Loss equiv: {loss_equiv:.3f}\t"
+                      f"Identity: {loss_identity:.3f}\t")
+            else:
+                print(
+                    f"{mode.upper()} Epoch: {epoch}, Batch: {batch_idx} of {len(data_loader)} Loss: {loss:.3f} Loss equiv:"
+                    f" {loss_equiv:.3}")
         elif args.autoencoder == "ae":
-            print(
-                f"{mode.upper()} Epoch: {epoch}, Batch: {batch_idx} of {len(data_loader)} Loss: {loss:.3f} Loss equiv:"
-                f" {loss_equiv:.3} Loss reconstruction: {reconstruction_loss:.3}")
+            if extra_dim > 0:
+                print(f"Epoch: {epoch} , Batch: {batch_idx} of {len(data_loader)} "
+                      f"Loss: {loss:.3f}"
+                      f"Loss equiv: {loss_equiv:.3f}\t"
+                      f"Identity: {loss_identity:.3f}\t"
+                      f"Reconstruction: {reconstruction_loss:.3f}\t")
+            else:
+                print(
+                    f"{mode.upper()} Epoch: {epoch}, Batch: {batch_idx} of {len(data_loader)} Loss: {loss:.3f} Loss equiv:"
+                    f" {loss_equiv:.3} Loss reconstruction: {reconstruction_loss:.3}")
         elif args.autoencoder == "vae":
-            print(
-                f"{mode.upper()} Epoch: {epoch}, Batch: {batch_idx} of {len(data_loader)} Loss: {loss:.3f} Loss equiv:"
-                f" {loss_equiv:.3} Loss reconstruction: {reconstruction_loss:.3} Loss KL: {kl_loss:.3}")
+            if extra_dim > 0:
+                print(
+                    f"{mode.upper()} Epoch: {epoch}, Batch: {batch_idx} of {len(data_loader)} Loss: {loss:.3f} Loss equiv:"
+                    f" {loss_equiv:.3} Loss reconstruction: {reconstruction_loss:.3} Loss KL: {kl_loss:.3} "
+                    f"Loss identity: {loss_identity:.3}")
+            else:
+                print(
+                    f"{mode.upper()} Epoch: {epoch}, Batch: {batch_idx} of {len(data_loader)} Loss: {loss:.3f} Loss equiv:"
+                    f" {loss_equiv:.3} Loss reconstruction: {reconstruction_loss:.3} Loss KL: {kl_loss:.3}")
         # endregion
 
         mu_loss += loss.item()
+        mu_rec_loss += reconstruction_loss.item()
 
         if mode == 'train':
             loss.backward()
             optimizer.step()
 
     mu_loss /= len(data_loader)
+    mu_rec_loss /= len(data_loader)
 
     if mode == 'val':
         errors.append(mu_loss)
+        errors_rec.append(mu_rec_loss)
         entropy.append(estimate_entropy(p, 1000).item())
+        if extra_dim > 0:
+            invariant_loss.append(loss_identity.item())
+            np.save(f'{model_path}/invariant_val.npy', invariant_loss)
         np.save(f'{model_path}/errors_val.npy', errors)
         np.save(f'{model_path}/entropy_val.npy', entropy)
+        np.save(f'{model_path}/errors_rec_val.npy', errors_rec)
+
+        if args.autoencoder != "None":
+            reconstruction_errors.append(reconstruction_loss.item())
+            np.save(f'{model_path}/reconstruction_val.npy', reconstruction_errors)
 
         if (epoch % args.save_interval) == 0:
             save(model, model_file)
