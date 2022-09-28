@@ -157,7 +157,10 @@ def train(epoch, data_loader, mode='train'):
             # The predicted z_mean after applying the rotation corresponding to the action
             z_mean_pred = (rot @ z_mean.unsqueeze(-1).detach()).squeeze(-1)  # Beware the detach!!!
         elif args.latent_dim == 3:
-            z_mean_pred = action @ z_mean.detach()
+            # print(z_mean.shape)
+            # z_mean_pred = action @ z_mean.detach()
+            # NOTICE!!!! Removed the detachement
+            z_mean_pred = action @ z_mean
         elif args.latent_dim > 3 and args.latent_dim % 2 == 0:
             action = action.squeeze(1)
             z_mean_pred = so2_rotate_subspaces(z_mean, action, detach=True)

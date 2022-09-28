@@ -36,8 +36,7 @@ class EquivarianceLoss:
                                            p_next: MixtureDistribution):
                 mean = p.input_mean
                 mean_next = p_next.input_mean
-                loss = ((mean.unsqueeze(1) - mean_next.unsqueeze(2)) ** 2).sum(-1).min(dim=-1)[0].sum(
-                    dim=-1).mean()
+                loss = matrix_dist(mean, mean_next).min(dim=-1)[0].sum(dim=-1).mean()
                 return loss
         elif loss_type == "chamfer":
             def equivariance_loss_function(p: MixtureDistribution,
