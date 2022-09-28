@@ -69,8 +69,9 @@ class EvalDataset(torch.utils.data.Dataset):
         for dataset_name in list_dataset_names[1:]:
             self.data = np.concatenate([self.data, np.load(path + dataset_name + '_eval_data.npy', mmap_mode='r+')],
                                        axis=0)
-            self.stabs = np.concatenate([self.stabs, np.load(path + dataset_name + '_eval_stabilizers.npy', mmap_mode='r+')],
-                                       axis=0)
+            self.stabs = np.concatenate(
+                [self.stabs, np.load(path + dataset_name + '_eval_stabilizers.npy', mmap_mode='r+')],
+                axis=0)
             if self.lbls is not None:
                 self.lbls = np.concatenate([self.lbls, np.load(path + dataset_name + '_eval_lbls.npy', mmap_mode='r+')],
                                            axis=0)
@@ -103,7 +104,7 @@ class PlatonicDataset(torch.utils.data.Dataset):
         if self.logarithmic:
             action = scipy.linalg.logm(action)
 
-        action = torch.from_numpy(action).float()
+        action = torch.from_numpy(np.expand_dims(action, axis=0)).float()
 
         return img1, img2, action  # torch.Tensor([self.classes[self.platonic]]).long()
 

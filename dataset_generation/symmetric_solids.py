@@ -69,7 +69,7 @@ def generate_training_data(load_folder, save_folder: str, dataset_name:str, shap
         image2 = np.transpose(loaded_images[index2], (2, 0, 1))/255
         rotation1 = loaded_rotations[index1]
         rotation2 = loaded_rotations[index2]
-        rotation_delta = rotation2 * np.linalg.inv(rotation1)
+        rotation_delta = rotation2 @ np.linalg.inv(rotation1)
         images.append([image1, image2])
         rotations.append(rotation_delta)
     images = np.array(images)
