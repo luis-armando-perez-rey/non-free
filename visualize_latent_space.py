@@ -319,15 +319,19 @@ elif args.latent_dim == 3:
 
         ax = plt.subplot(221)
         ax.imshow(npimages[i])
+        ax.set_xticks([])
+        ax.set_yticks([])
         ax = plt.subplot(222)
         ax.imshow(npimages_next[i])
+        ax.set_xticks([])
+        ax.set_yticks([])
         ax = plt.subplot(223, projection='mollweide')
 
         _ = visualize_so3_probabilities(mean_numpy[i], 0.05 * np.ones(len(mean_numpy[i])), ax=ax, fig=fig,
                                         show_color_wheel=True)
         ax = plt.subplot(224, projection='mollweide')
         _ = visualize_so3_probabilities(mean_next[i], 0.05 * np.ones(len(mean_next[i])), ax=ax, fig=fig,
-                                        rotations_gt = mean_rot[i],
+                                        rotations_gt=mean_rot[i],
                                         show_color_wheel=True)
         fig.savefig(os.path.join(save_folder, f"{i}.png"), bbox_inches='tight')
         plt.close("all")
@@ -342,10 +346,46 @@ elif args.latent_dim == 3:
         ax.scatter3D(rots[:, 0], rots[:, 1], rots[:, 2], s=[30] * len(rots))
         ax = plt.subplot(224, projection='3d')
         rots = R.from_matrix(mean_next[i]).as_rotvec()  # .as_euler('zxy', degrees=False)
-        ax.scatter3D(rots[:, 0], rots[:, 1], rots[:, 2], s=[30] * len(rots))
+        ax.scatter3D(rots[:, 0], rots[:, 1], rots[:, 2], s=[30] * len(rots), c="r", alpha=0.1)
         rots = R.from_matrix(mean_rot[i]).as_rotvec()  # .as_euler('zxy', degrees=False)
         ax.scatter3D(rots[:, 0], rots[:, 1], rots[:, 2], s=[30] * len(rots), marker="*")
-
-
         fig.savefig(os.path.join(save_folder, f"rotvec_{i}.png"), bbox_inches='tight')
         plt.close("all")
+
+        fig = plt.figure(figsize=(5, 5))
+        ax = plt.subplot(111)
+        add_image_to_ax(npimages_next[i], ax=ax)
+        fig.savefig(os.path.join(save_folder, f"image_alone_{i}.png"), bbox_inches='tight')
+        plt.close("all")
+        fig = plt.figure(figsize=(5, 5))
+        ax = plt.subplot(111, projection='3d')
+        ax.scatter3D(rots[:, 0], rots[:, 1], rots[:, 2], s=[30] * len(rots), c="r", alpha=0.5)
+        N = 200
+        stride = 1
+        u = np.linspace(0, 2 * np.pi, N)
+        v = np.linspace(0, np.pi, N)
+        radius = np.sqrt(np.pi)
+        x = np.outer(np.cos(u) * radius, np.sin(v) * radius)
+        y = np.outer(np.sin(u) * radius, np.sin(v) * radius)
+        z = np.outer(np.ones(np.size(u)) * radius, np.cos(v) * radius)
+        ax.plot_surface(x, y, z, linewidth=0.0, cstride=stride, alpha=0.05, color="k", rstride=stride)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.set_zticks([])
+        fig.savefig(os.path.join(save_folder, f"rotvec_alone_{i}.png"), bbox_inches='tight')
+
+    unique_images = []
+    for unique in np.unique(dset.stabs):
+        unique_images.append(dset.data[dset.stabs == unique][0][0])
+
+    unique_images = torch.tensor(np.array(unique_images), dtype=img.dtype).to(device)
+    unique_mean, unique_logvar, unique_extra = model(unique_images)
+    # region PLOT RECONSTRUCTIONS
+    if args.autoencoder != "None":
+        x_rec = decoder(torch.cat([unique_mean.view((unique_mean.shape[0], -1)), unique_extra], dim=-1))
+        x_rec = x_rec.permute((0, 2, 3, 1)).detach().cpu().numpy()
+        for i in range(len(x_rec)):
+            add_image_to_ax(1 / (1 + np.exp(-x_rec[i])))
+            plt.savefig(os.path.join(save_folder, f"reconstruction_{i}.png"), bbox_inches='tight')
+            add_image_to_ax(unique_images[i].permute((1, 2, 0)).detach().cpu().numpy())
+            plt.savefig(os.path.join(save_folder, f"input_image_{i}.png"), bbox_inches='tight')
