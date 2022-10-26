@@ -51,7 +51,7 @@ elif args.dataset == "symmetric_solids":
     stabilizers = None
     eval_images = None
     flat_stabilizers = None
-elif args.dataset == "arrows" or args.dataset == "sinusoidal":
+elif args.dataset == "arrows" or args.dataset == "sinusoidal" or args.dataset=="rotating_mnist":
     dset = EquivDatasetStabs(f'{args.data_dir}/{args.dataset}/', list_dataset_names=args.dataset_name)
     dset_eval = EvalDataset(f'{args.data_dir}/{args.dataset}/', list_dataset_names=args.dataset_name)
     num_objects = dset_eval.data.shape[0]
@@ -95,7 +95,7 @@ if args.autoencoder != 'None':
 model.eval()
 
 if args.dataset == "arrows" or args.dataset == "sinusoidal" or args.dataset.endswith(
-        "translation") or args.dataset == "double_arrows":
+        "translation") or args.dataset == "double_arrows" or args.dataset=="rotating_mnist":
     img, img_next, action, n_stabilizers = next(iter(train_loader))
     print("EVAL IMAGES SHAPE", eval_images.shape)
     mean_eval, logvar_eval, extra_eval = model(eval_images.to(device))

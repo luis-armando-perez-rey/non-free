@@ -2,7 +2,7 @@ import argparse
 
 from dataset_generation.simple_sinusoidal import generate_dataset_sinusoidals, generate_dataset_regular_sinusoidals, \
     make_sinusoidal_image
-from dataset_generation import image_translation, dsprites_loader, symmetric_solids, rotating_arrows
+from dataset_generation import image_translation, dsprites_loader, symmetric_solids, rotating_arrows, rotating_mnist
 
 parser = argparse.ArgumentParser()
 # Dataset
@@ -77,6 +77,10 @@ def generate_dataset(dataset):
         image_translation.generate_training_data(image, args.n_examples, "./data/sinusoidal_translation",
                                                  args.dataset_name)
         image_translation.generate_eval_data(image, 32, "./data/sinusoidal_translation", args.dataset_name)
+    elif dataset == "rotating_mnist":
+        rotating_mnist.generate_training_data("./data/rotating_mnist",
+                                                 args.dataset_name, args.n_examples)
+        rotating_mnist.generate_eval_data("./data/rotating_mnist",args.dataset_name, total_rotations=36)
 
     elif dataset == "symmetric_solids":
         print("NOTICE: In symmetric_solids dataset n_arrows option corresponds to the number of the shape id. E.g. 0 "
