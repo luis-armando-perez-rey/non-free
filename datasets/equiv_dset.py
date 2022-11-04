@@ -8,14 +8,16 @@ import scipy
 
 
 class EquivDataset(torch.utils.data.Dataset):
-    def __init__(self, path: str, list_dataset_names: List[str] = ["equiv"], greyscale: bool = False,  max_data_per_dataset:Optional[int]= None):
+    def __init__(self, path: str, list_dataset_names: List[str] = ["equiv"], greyscale: bool = False,
+                 max_data_per_dataset: int = -1):
         print(f"Loading the datasets {list_dataset_names}")
         data = np.load(path + list_dataset_names[0] + '_data.npy', mmap_mode='r+')
         lbls = np.load(path + list_dataset_names[0] + '_lbls.npy', mmap_mode='r+')
-        if max_data_per_dataset is not None:
+        if max_data_per_dataset > 0:
             num_selected_data = np.min([max_data_per_dataset, len(data)])
             if max_data_per_dataset > len(data):
-                print(f"Warning: max_data_per_dataset is larger than the number of data in the dataset {list_dataset_names[0]}")
+                print(
+                    f"Warning: max_data_per_dataset is larger than the number of data in the dataset {list_dataset_names[0]}")
             data = data[:num_selected_data]
             lbls = lbls[:num_selected_data]
         self.data = data
@@ -26,14 +28,14 @@ class EquivDataset(torch.utils.data.Dataset):
             lbls = np.load(path + dataset_name + '_lbls.npy', mmap_mode='r+')
             if max_data_per_dataset is not None:
                 num_selected_data = np.min([max_data_per_dataset, len(data)])
-                if max_data_per_dataset>len(data):
-                    print(f"Warning: max_data_per_dataset is larger than the number of data in the dataset {dataset_name}")
+                if max_data_per_dataset > len(data):
+                    print(
+                        f"Warning: max_data_per_dataset is larger than the number of data in the dataset {dataset_name}")
                 data = data[:num_selected_data]
                 lbls = lbls[:num_selected_data]
             self.data = np.concatenate([self.data, data], axis=0)
             self.lbls = np.concatenate([self.lbls, lbls], axis=0)
         self.greyscale = greyscale
-
 
     def __getitem__(self, index):
         if self.greyscale:
@@ -53,24 +55,27 @@ class EquivDatasetStabs(EquivDataset):
     stabilizers corresponding to the image pair.
     """
 
-    def __init__(self, path: str, list_dataset_names: List[str] = ["equiv"], greyscale: bool = False, max_data_per_dataset:Optional[int]= None):
+    def __init__(self, path: str, list_dataset_names: List[str] = ["equiv"], greyscale: bool = False,
+                 max_data_per_dataset: int = -1):
         super().__init__(path, list_dataset_names, greyscale, max_data_per_dataset)
         for dataset_name in list_dataset_names:
             assert os.path.exists(
                 path + dataset_name + '_stabilizers.npy'), f"{dataset_name}_stabilizers.npy cardinality file not found"
         stabs = np.load(path + list_dataset_names[0] + '_stabilizers.npy', mmap_mode='r+')
-        if max_data_per_dataset is not None:
+        if max_data_per_dataset > 0:
             num_selected_data = np.min([max_data_per_dataset, len(stabs)])
             if max_data_per_dataset > len(stabs):
-                print(f"Warning: max_data_per_dataset is larger than the number of data in the dataset {list_dataset_names[0]}")
+                print(
+                    f"Warning: max_data_per_dataset is larger than the number of data in the dataset {list_dataset_names[0]}")
             stabs = stabs[:num_selected_data]
         self.stabs = stabs
         for dataset_name in list_dataset_names[1:]:
             stabs = np.load(path + dataset_name + '_stabilizers.npy', mmap_mode='r+')
-            if max_data_per_dataset is not None:
+            if max_data_per_dataset > 0:
                 num_selected_data = np.min([max_data_per_dataset, len(stabs)])
                 if max_data_per_dataset > len(stabs):
-                    print(f"Warning: max_data_per_dataset is larger than the number of data in the dataset {dataset_name}")
+                    print(
+                        f"Warning: max_data_per_dataset is larger than the number of data in the dataset {dataset_name}")
                 stabs = stabs[:num_selected_data]
             self.stabs = np.concatenate([self.stabs, stabs], axis=0)
 

@@ -23,6 +23,7 @@ def get_args():
     parser.add_argument('--extra-dim', type=int, default=0, help="Orbit dimension")
     parser.add_argument('--latent-dim', type=int, default=2, help="Dimension N for SO(N)")
     parser.add_argument('--tau', type=float, default=1., help="Temperature of InfoNCE")
+    parser.add_argument('--ndatapairs', type=int, default=-1, help="Number of pairs to use for training")
 
     parser.add_argument('--checkpoints-dir', default='checkpoints', type=str)
 

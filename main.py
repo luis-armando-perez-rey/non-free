@@ -45,7 +45,7 @@ if args.dataset == 'platonics':
     dset = PlatonicMerged(N=30000, data_dir=args.data_dir)
 else:
     print(f"Loading dataset {args.dataset} with dataset name {args.dataset_name}")
-    dset = EquivDataset(f'{args.data_dir}/{args.dataset}/', list_dataset_names=args.dataset_name)
+    dset = EquivDataset(f'{args.data_dir}/{args.dataset}/', list_dataset_names=args.dataset_name, max_data_per_dataset=args.ndatapairs)
     if args.dataset != "symmetric_solids":
         dset_eval = EvalDataset(f'{args.data_dir}/{args.dataset}/', list_dataset_names=args.dataset_name)
         eval_images = torch.FloatTensor(dset_eval.data.reshape(-1, dset_eval.data.shape[-1]))
