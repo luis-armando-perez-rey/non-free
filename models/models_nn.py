@@ -27,6 +27,8 @@ class Decoder(nn.Module):
             self.decoder = ResNet1DDec(nc, total_latent_dim)
         elif model == "resnet":
             self.decoder = ResNet18Dec(nc, total_latent_dim)
+        elif model == "mnistcnn":
+            self.decoder = DecMNIST(encoded_space_dim=total_latent_dim)
         else:
             ValueError(f"{model} not available for decoder")
 
@@ -134,6 +136,9 @@ class MDN(nn.Module):
         elif model == "dislib1":
             self.encoder = DisLibEncoder1D(latent_dim=converted_dim, nc=nc)
             self.encoder_extra = DisLibEncoder1D(latent_dim=extra_dim, nc=nc)
+        elif model == "mnistcnn":
+            self.encoder = EncMNIST(latent_dim = converted_dim)
+            self.encoder_extra = EncMNIST(latent_dim = extra_dim)
         self.latent_dim = latent_dim
         self.normalize_extra = normalize_extra
         self.extra_dim = extra_dim
@@ -192,6 +197,8 @@ class MDNSimplified(nn.Module):
             self.encoder = BaseEncoder1D(latent_dim=converted_dim, nc=nc)
         elif model == "dislib1":
             self.encoder = DisLibEncoder1D(latent_dim=converted_dim, nc=nc)
+        elif model == "mnistcnn":
+            self.encoder = EncMNIST(latent_dim = converted_dim)
         self.latent_dim = latent_dim
         self.normalize_extra = normalize_extra
         self.extra_dim = extra_dim

@@ -51,7 +51,7 @@ elif args.dataset == "symmetric_solids":
     stabilizers = None
     eval_images = None
     flat_stabilizers = None
-elif args.dataset == "arrows" or args.dataset == "sinusoidal" or args.dataset=="rotating_mnist":
+elif args.dataset == "arrows" or args.dataset == "sinusoidal" or args.dataset.startswith("rotating_mnist") or args.dataset == "modelnet":
     dset = EquivDatasetStabs(f'{args.data_dir}/{args.dataset}/', list_dataset_names=args.dataset_name)
     dset_eval = EvalDataset(f'{args.data_dir}/{args.dataset}/', list_dataset_names=args.dataset_name)
     num_objects = dset_eval.data.shape[0]
@@ -95,7 +95,7 @@ if args.autoencoder != 'None':
 model.eval()
 
 if args.dataset == "arrows" or args.dataset == "sinusoidal" or args.dataset.endswith(
-        "translation") or args.dataset == "double_arrows" or args.dataset=="rotating_mnist":
+        "translation") or args.dataset == "double_arrows" or args.dataset.startswith("rotating_mnist") or args.dataset == "modelnet":
     img, img_next, action, n_stabilizers = next(iter(train_loader))
     print("EVAL IMAGES SHAPE", eval_images.shape)
     mean_eval, logvar_eval, extra_eval = model(eval_images.to(device))
@@ -120,6 +120,11 @@ else:
 # Plot the training evaluation
 fig, _ = load_plot_val_errors(os.path.join(model_dir, "errors_val.npy"))
 fig.savefig(os.path.join(save_folder, 'errors_val.png'))
+try:
+    fig, _ = load_plot_val_errors(os.path.join(model_dir, "reconstruction_val.npy"))
+    fig.savefig(os.path.join(save_folder, 'errors_rec.png'))
+except:
+    print("Could not plot reconstruction errors")
 
 img_shape = np.array(img.shape[1:])
 if img.dim() == 2:

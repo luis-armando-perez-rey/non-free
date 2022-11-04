@@ -2,7 +2,8 @@ import argparse
 
 from dataset_generation.simple_sinusoidal import generate_dataset_sinusoidals, generate_dataset_regular_sinusoidals, \
     make_sinusoidal_image
-from dataset_generation import image_translation, dsprites_loader, symmetric_solids, rotating_arrows, rotating_mnist
+from dataset_generation import image_translation, dsprites_loader, symmetric_solids, rotating_arrows, rotating_mnist, \
+    modelnet
 
 parser = argparse.ArgumentParser()
 # Dataset
@@ -79,9 +80,18 @@ def generate_dataset(dataset):
         image_translation.generate_eval_data(image, 32, "./data/sinusoidal_translation", args.dataset_name)
     elif dataset == "rotating_mnist":
         rotating_mnist.generate_training_data("./data/rotating_mnist",
-                                                 args.dataset_name, args.n_examples)
-        rotating_mnist.generate_eval_data("./data/rotating_mnist",args.dataset_name, total_rotations=36)
-
+                                              args.dataset_name, args.n_examples)
+        rotating_mnist.generate_eval_data("./data/rotating_mnist", args.dataset_name, total_rotations=36)
+    elif dataset == "rotating_mnist_stochastic":
+        print("Generating stochastic rotating mnist, number of examples {}".format(args.n_examples))
+        rotating_mnist.generate_training_data_stochastic("./data/rotating_mnist_stochastic",
+                                              args.dataset_name, args.n_examples)
+        rotating_mnist.generate_eval_data("./data/rotating_mnist_stochastic", args.dataset_name, total_rotations=36)
+    elif dataset == "modelnet":
+        assert args.dataset_name in modelnet.render_dictionary.keys(), f"Unknown modelnet object {args.dataset_name}"
+        render_details = modelnet.render_dictionary[args.dataset_name]
+        modelnet.generate_training_data("./data/modelnet", args.dataset_name,object_name=render_details[0],object_id=render_details[1],examples_per_object=args.n_examples, total_angles=720)
+        modelnet.generate_eval_data("./data/modelnet", args.dataset_name,object_name=render_details[0],object_id=render_details[1])
     elif dataset == "symmetric_solids":
         print("NOTICE: In symmetric_solids dataset n_arrows option corresponds to the number of the shape id. E.g. 0 "
               "corresponds to the tetrahedron 1 to the cube, etc. see "
