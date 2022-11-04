@@ -10,6 +10,8 @@ from utils.plotting_utils import save_embeddings_on_circle
 from models.losses import EquivarianceLoss, ReconstructionLoss, IdentityLoss, estimate_entropy
 from models.distributions import MixtureDistribution, get_prior, get_z_values
 
+
+
 # region PARSE ARGUMENTS
 parser = get_args()
 args = parser.parse_args()
@@ -67,7 +69,8 @@ extra_dim = args.extra_dim  # the invariant component
 
 print("Using model", args.model)
 if args.use_simplified:
-    model = MDNSimplified(img_shape[0], args.latent_dim, N, extra_dim, model=args.model, normalize_extra=True).to(device)
+    model = MDNSimplified(img_shape[0], args.latent_dim, N, extra_dim, model=args.model, normalize_extra=True).to(
+        device)
 else:
     model = MDN(img_shape[0], args.latent_dim, N, extra_dim, model=args.model, normalize_extra=True).to(device)
 parameters = list(model.parameters())
@@ -78,7 +81,6 @@ elif args.latent_dim == 3:
     dec_dim = 9 * N
 elif args.latent_dim == 4:
     dec_dim = 4 * N
-
 
 if (args.autoencoder != "None") & (args.decoder != "None"):
     dec = Decoder(nc=img_shape[0], latent_dim=dec_dim, extra_dim=extra_dim, model=args.decoder).to(device)
@@ -171,7 +173,7 @@ def train(epoch, data_loader, mode='train'):
         p = MixtureDistribution(z_mean, z_logvar, args.enc_dist)
         p_next = MixtureDistribution(z_mean_next, z_logvar_next, args.enc_dist)
         p_pred = MixtureDistribution(z_mean_pred, z_logvar, args.enc_dist)
-        loss_equiv = equiv_loss_function(p_next, p_pred)
+        loss_equiv = args.weightequivariance * equiv_loss_function(p_next, p_pred)
         losses = [loss_equiv]
 
         # region CALCULATE IDENTITY LOSS
@@ -196,7 +198,12 @@ def train(epoch, data_loader, mode='train'):
             #     reconstruction_loss += rec_loss_function(x_rec, image).mean()
             #     reconstruction_loss += rec_loss_function(x_next_rec, img_next).mean()
             x_rec = dec(torch.cat([z_mean.view((z_mean.shape[0], -1)), extra], dim=-1).detach())
+
             reconstruction_loss += rec_loss_function(x_rec, image).mean()
+            #TODO: Review if this helps
+            # x_rec_next = dec(torch.cat([z_mean_next.view((z_mean.shape[0], -1)), extra], dim=-1).detach())
+            # reconstruction_loss += rec_loss_function(x_rec_next, img_next).mean()
+
             losses.append(reconstruction_loss)
         # endregion
 
@@ -215,7 +222,7 @@ def train(epoch, data_loader, mode='train'):
         if mode == "train":
             loss = sum(losses)
         elif mode == "val":
-            loss = loss_equiv
+            loss = loss_equiv / args.weightequivariance
         else:
             loss = None
 
