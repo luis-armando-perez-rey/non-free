@@ -106,10 +106,12 @@ class ArrowCanvas:
         plt.show()
 
 
+
+
 def generate_training_data(num_arrows_list, dataset_folder, dataset_name, style_list: Optional[List[str]] = None,
                            color_list: Optional[List[str]] = None, radius_list: Optional[List[float]] = None,
                            examples_per_num_arrows: int = 100,
-                           resolution=(64, 64), multicolor=False):
+                           resolution=(64, 64), multicolor=False, consecutive=False):
     equiv_data = []
     equiv_lbls = []
     equiv_stabilizers = []
@@ -132,8 +134,14 @@ def generate_training_data(num_arrows_list, dataset_folder, dataset_name, style_
                                 num_arrows, style, color, radius, multicolor, num_example))
                         c1 = ArrowCanvas(resolution=resolution)
                         c2 = ArrowCanvas(resolution=resolution)
-                        angle1 = 2 * np.pi * np.random.random()
-                        angle2 = 2 * np.pi * np.random.random()
+                        if consecutive:
+                            possible_angles = np.linspace(0, 2 * np.pi, examples_per_num_arrows+1, endpoint=False)
+                            angle1 = possible_angles[num_example]
+                            angle2 = possible_angles[num_example + 1]
+                            print(angle1, angle2)
+                        else:
+                            angle1 = 2 * np.pi * np.random.random()
+                            angle2 = 2 * np.pi * np.random.random()
 
                         if multicolor:
                             assert len(
@@ -167,6 +175,8 @@ def generate_training_data(num_arrows_list, dataset_folder, dataset_name, style_
     np.save(os.path.join(dataset_folder, dataset_name + '_data.npy'), equiv_data)
     np.save(os.path.join(dataset_folder, dataset_name + '_lbls.npy'), equiv_lbls)
     np.save(os.path.join(dataset_folder, dataset_name + '_stabilizers.npy'), equiv_stabilizers)
+
+
 
 
 def generate_eval_data(num_arrows_list, dataset_folder, dataset_name, style_list: Optional[List[str]] = None,

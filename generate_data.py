@@ -36,6 +36,15 @@ def generate_dataset(dataset):
             rotating_arrows.generate_eval_data(**generation_parameters)
         else:
             raise ValueError("Unknown split data")
+    elif dataset == "consecutive_arrows":
+        generation_parameters = dict(num_arrows_list=args.n_arrows, color_list=args.colors, style_list=args.styles,
+                                     dataset_folder="./data/consecutive_arrows",
+                                     dataset_name=args.dataset_name,
+
+                                     )
+        rotating_arrows.generate_training_data(**generation_parameters, examples_per_num_arrows=args.n_examples, consecutive=True)
+        rotating_arrows.generate_eval_data(**generation_parameters)
+
 
     elif dataset == "double_arrows":
 
