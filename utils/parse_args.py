@@ -37,6 +37,7 @@ def get_args():
     parser.add_argument('--chamfer-reg', default=0.0, type=float)
     parser.add_argument('--weightequivariance', default=1.0, type=float)
     parser.add_argument('--use-comet', default=False, action='store_true')
+    parser.add_argument('--neptune-user', default="", type=str, help="Neptune user if None, then Neptune is not used")
 
     # Model
     parser.add_argument('--identity-loss', default="infonce", type=str,
