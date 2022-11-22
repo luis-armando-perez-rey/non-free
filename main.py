@@ -15,7 +15,14 @@ from models.distributions import MixtureDistribution, get_prior, get_z_values
 # region PARSE ARGUMENTS
 parser = get_args()
 args = parser.parse_args()
+if args.neptune_user != "":
+    from utils.neptune_utils import initialize_neptune_run, save_sys_id
+    run = initialize_neptune_run(args.neptune_user, "non-free")
+    run["parameters"] = vars(args)
+else:
+    run = None
 print(args)
+
 # endregion
 
 # region TORCH SETUP
@@ -27,18 +34,28 @@ print('Using device: ', device)
 # endregion
 
 # region PATHS
+# Paths were the models will be saved
 model_path = os.path.join(args.checkpoints_dir, args.model_name)
-figures_dir = os.path.join(model_path, 'figures')
-model_file = os.path.join(model_path, 'model.pt')
-decoder_file = os.path.join(model_path, "decoder.pt")
-meta_file = os.path.join(model_path, 'metadata.pkl')
-log_file = os.path.join(model_path, 'log.txt')
 make_dir(model_path)
+decoder_file = os.path.join(model_path, "decoder.pt")
+# Paths for saving the images
+figures_dir = os.path.join(model_path, 'figures')
 make_dir(figures_dir)
+model_file = os.path.join(model_path, 'model.pt')
+meta_file = os.path.join(model_path, 'metadata.pkl')
+# Neptune txt file
+if run is not None:
+    neptune_id_path = os.path.join(model_path, 'neptune.txt')
+    save_sys_id(run, neptune_id_path)
+
+
+
 # endregion
 
+# region SAVE METADATA
 # Save the arguments
 pickle.dump({'args': args}, open(meta_file, 'wb'))
+# endregion
 
 # region SET DATASET
 if args.dataset == 'platonics':
@@ -75,18 +92,24 @@ else:
     model = MDN(img_shape[0], args.latent_dim, N, extra_dim, model=args.model, normalize_extra=True).to(device)
 parameters = list(model.parameters())
 
-if args.latent_dim == 2:
-    dec_dim = 2 * N
-elif args.latent_dim == 3:
-    dec_dim = 9 * N
-elif args.latent_dim == 4:
-    dec_dim = 4 * N
+if args.autoencoder == "ae_single":
+    dec_dim = args.latent_dim
+else:
+    if args.latent_dim == 2:
+        dec_dim = 2 * N
+    elif args.latent_dim == 3:
+        dec_dim = 9 * N
+    elif args.latent_dim == 4:
+        dec_dim = 4 * N
+    else:
+        dec_dim = 0
 
 if (args.autoencoder != "None") & (args.decoder != "None"):
     dec = Decoder(nc=img_shape[0], latent_dim=dec_dim, extra_dim=extra_dim, model=args.decoder).to(device)
 
     parameters += list(dec.parameters())
     rec_loss_function = ReconstructionLoss(args.reconstruction_loss)
+
 else:
     dec = None
 # endregion
@@ -102,8 +125,6 @@ invariant_loss = []
 identity_loss_function = IdentityLoss(args.identity_loss, temperature=args.tau)
 equiv_loss_train_function = EquivarianceLoss(args.equiv_loss)
 equiv_loss_val_function = EquivarianceLoss("chamfer_val")
-
-
 # endregion
 
 def matrix_dist(z_mean_next, z_mean_pred, latent_dim):
@@ -125,6 +146,12 @@ def train(epoch, data_loader, mode='train'):
         equiv_loss_function = equiv_loss_val_function
     else:
         raise ValueError(f"Mode {mode} not defined")
+
+    # Initialize the losses that will be used for logging with Neptune
+    total_batches = len(data_loader)
+    epoch_loss_rec = 0
+    epoch_loss_equiv = 0
+    epoch_loss_identity = 0
 
     for batch_idx, (image, img_next, action) in enumerate(data_loader):
         batch_size = image.shape[0]
@@ -161,7 +188,7 @@ def train(epoch, data_loader, mode='train'):
         elif args.latent_dim == 3:
             # print(z_mean.shape)
             # z_mean_pred = action @ z_mean.detach()
-            # NOTICE!!!! Removed the detachement
+            # NOTICE!!!! Removed the detachment
             z_mean_pred = action @ z_mean
         elif args.latent_dim > 3 and args.latent_dim % 2 == 0:
             action = action.squeeze(1)
@@ -175,36 +202,46 @@ def train(epoch, data_loader, mode='train'):
         p_pred = MixtureDistribution(z_mean_pred, z_logvar, args.enc_dist)
         loss_equiv = args.weightequivariance * equiv_loss_function(p_next, p_pred)
         losses = [loss_equiv]
+        epoch_loss_equiv += loss_equiv.item()
+        if run is not None:
+            run[mode+"/batch/loss_equiv"].log(loss_equiv)
 
         # region CALCULATE IDENTITY LOSS
         if extra_dim > 0:
             loss_identity = identity_loss_function(extra, extra_next)
             losses.append(loss_identity)
+            if run is not None:
+                run[mode+"/batch/loss_identity"].log(loss_identity)
         # endregion
 
         # region CALCULATE RECONSTRUCTION LOSS
         reconstruction_loss = torch.tensor(0, dtype=image.dtype).to(device)
         if args.autoencoder != "None":
-            # TODO: Keep this part of the code in case we are interested on single latent decoding
-            # # Get latent variables
-            # z = get_z_values(p, extra, args.num, args.autoencoder)
-            # z_next = get_z_values(p_next, extra_next, args.num, args.autoencoder)
-            # # Make the extra dimension invariant
-            # z_next[..., -extra_dim:] = z[..., -extra_dim:]
-            # # Calculate reconstruction loss for each of the latent representations
-            # for n in range(args.num):
-            #     x_rec = dec(z[:, n])
-            #     x_next_rec = dec(z_next[:, n])
-            #     reconstruction_loss += rec_loss_function(x_rec, image).mean()
-            #     reconstruction_loss += rec_loss_function(x_next_rec, img_next).mean()
-            x_rec = dec(torch.cat([z_mean.view((z_mean.shape[0], -1)), extra], dim=-1).detach())
-
-            reconstruction_loss += rec_loss_function(x_rec, image).mean()
+            if args.autoencoder == "ae_single":
+                """
+                Decode each of the group representations separately. 
+                """
+                # Get latent variables
+                z = get_z_values(p, extra, args.num, args.autoencoder)
+                z_next = get_z_values(p_next, extra_next, args.num, args.autoencoder)
+                # Make the extra dimension invariant
+                z_next[..., -extra_dim:] = z[..., -extra_dim:]
+                # Calculate reconstruction loss for each of the latent representations
+                for n in range(args.num):
+                    x_rec = dec(z[:, n].detach())
+                    x_next_rec = dec(z_next[:, n].detach())
+                    reconstruction_loss += rec_loss_function(x_rec, image).mean()
+                    reconstruction_loss += rec_loss_function(x_next_rec, img_next).mean()
+            else:
+                x_rec = dec(torch.cat([z_mean.view((z_mean.shape[0], -1)), extra], dim=-1).detach())
+                reconstruction_loss += rec_loss_function(x_rec, image).mean()
             #TODO: Review if this helps
             # x_rec_next = dec(torch.cat([z_mean_next.view((z_mean.shape[0], -1)), extra], dim=-1).detach())
             # reconstruction_loss += rec_loss_function(x_rec_next, img_next).mean()
 
             losses.append(reconstruction_loss)
+            if run is not None:
+                run[mode+"/batch/reconstruction"].log(reconstruction_loss)
         # endregion
 
         # region CALCULATE KL LOSS
@@ -225,6 +262,8 @@ def train(epoch, data_loader, mode='train'):
             loss = loss_equiv / args.weightequivariance
         else:
             loss = None
+        if run is not None:
+            run[mode+"/batch/loss"].log(loss)
 
         # region LOGGING LOSS
         # Print loss progress
@@ -238,7 +277,7 @@ def train(epoch, data_loader, mode='train'):
                 print(
                     f"{mode.upper()} Epoch: {epoch}, Batch: {batch_idx} of {len(data_loader)} Loss: {loss:.3f} Loss equiv:"
                     f" {loss_equiv:.3}")
-        elif args.autoencoder == "ae":
+        elif args.autoencoder.startswith("ae"):
             if extra_dim > 0:
                 print(f"Epoch: {epoch} , Batch: {batch_idx} of {len(data_loader)} "
                       f"Loss: {loss:.3f}"
@@ -268,8 +307,8 @@ def train(epoch, data_loader, mode='train'):
             loss.backward()
             optimizer.step()
 
-    mu_loss /= len(data_loader)
-    mu_rec_loss /= len(data_loader)
+    mu_loss /= total_batches
+    mu_rec_loss /= total_batches
 
     if mode == 'val':
         errors.append(mu_loss)
@@ -302,9 +341,24 @@ def train(epoch, data_loader, mode='train'):
     # Write to standard output. Allows printing to file progress when using HPC
     sys.stdout.flush()
 
+    # Get each loss component to be logged by Neptune
+    epoch_loss = mu_loss
+    epoch_loss_rec = epoch_loss_rec / total_batches
+    epoch_loss_equiv = epoch_loss_equiv / total_batches
+    epoch_loss_identity = epoch_loss_identity / total_batches
+    if run is not None:
+        run[mode+"/epoch/loss"].log(epoch_loss)
+        if args.autoencoder != "None":
+            run[mode+"/epoch/reconstruction"].log(epoch_loss_rec)
+        run[mode+"/epoch/equivariance"].log(epoch_loss_equiv)
+        if extra_dim > 0:
+            run[mode+"/epoch/identity"].log(epoch_loss_identity)
+
+
 
 if __name__ == "__main__":
     for epoch_ in range(1, args.epochs + 1):
         train(epoch_, train_loader, 'train')
         with torch.no_grad():
             train(epoch_, val_loader, 'val')
+    run.stop()

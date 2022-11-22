@@ -100,7 +100,7 @@ def get_z_values(p: MixtureDistribution, extra: torch.tensor, n_samples: int, au
     :param autoencoder_type: Type of autoencoder to be used
     :return:
     """
-    if autoencoder_type == "ae":
+    if autoencoder_type.startswith("ae"):
         z = p.input_mean
     elif autoencoder_type == "vae":
         z = torch.movedim(p.sample_latent((n_samples,)), 0, 1)
