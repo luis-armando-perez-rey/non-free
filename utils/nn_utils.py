@@ -1,7 +1,6 @@
 import os
 import numpy as np
 import torch
-from typing import List
 
 pi = torch.tensor(np.pi)
 
@@ -42,7 +41,8 @@ def get_optimizer(optimizer_type: str, learning_rate: float, parameters):
     elif optimizer_type == "sgd":
         optimizer = torch.optim.SGD(parameters, lr=learning_rate, momentum=0.9, nesterov=True)
     else:
-        ValueError(f"Optimizer {optimizer_type} not defined")
+        optimizer = None
+        NotImplementedError(f"Optimizer {optimizer_type} not defined")
     return optimizer
 
 
@@ -69,6 +69,7 @@ def so2_rotate_subspaces(embedding, action, detach=True):
     """
     Rotates the embeddings z\in Z_G according to action, Z_G = Z_1\times \cdots \times Z_N.
     Considers that each subspace Z_i = S^1\subseteq R^2 and rotates it by the angle in action[..., i].
+    :param detach: If true, the gradients are not propagated through the rotated embeddings
     :param embedding: Embeddings with shape (batch_size, sum(n_distributions_per_subspace), 2)
     :param action: Action with shape (batch_size, len(n_distributions_per_subspace))
     :return:
@@ -84,3 +85,20 @@ def so2_rotate_subspaces(embedding, action, detach=True):
         embedding_space[:, :, num_subspace * 2: (num_subspace + 1) * 2] = (
                 rot @ embedding_subspace.unsqueeze(-1)).squeeze(-1)
     return embedding_space
+
+
+def get_rotated_mean(mean, action, latent_dim):
+    """
+    Get the mean of the latent space after applying the action to the mean
+    :param mean: Mean location
+    :param action: Action to apply
+    :param latent_dim: Number of latent dims used to represent Z_G
+    :return:
+    """
+    if latent_dim == 2:
+        rot = make_rotation_matrix(action)
+        mean_rot = (rot @ mean.unsqueeze(-1)).squeeze(-1)
+        mean_rot = mean_rot.detach().cpu().numpy()
+    else:
+        mean_rot = so2_rotate_subspaces(mean, action)
+    return mean_rot
