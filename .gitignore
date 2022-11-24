@@ -8,7 +8,10 @@ __pycache__/
 
 data/
 checkpoints/
+checkpoints_ENR/
 saved_models/
+saved_models_ENR/
+cluster_models/
 visualizations/
 
 # Distribution / packaging
