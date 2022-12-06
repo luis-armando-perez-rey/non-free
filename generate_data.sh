@@ -1,6 +1,6 @@
 #!/bin/bash
-source /home/TUE/s161416/miniconda3/etc/profile.d/conda.sh
-source activate gpytorch
+# source /home/TUE/s161416/miniconda3/etc/profile.d/conda.sh
+# source activate gpytorch
 # Sinusoidal data generation
 #python3 generate_data.py --n_examples 10000 --dataset_name 1 --n_arrows 1 --dataset sinusoidal
 #python3 generate_data.py --n_examples 10000 --dataset_name 2 --n_arrows 2 --dataset sinusoidal
@@ -51,4 +51,3 @@ python generate_data.py --n_examples 2500 --dataset_name 5 --n_arrows 5 --datase
 #python3 generate_data.py --n_examples 2000 --dataset_name 3_c --n_arrows 3 --dataset arrows --split_data "eval" --colors "tab:red" "tab:green" "tab:purple" "tab:orange" "tab:blue"
 #python3 generate_data.py --n_examples 2000 --dataset_name 5_c --n_arrows 5 --dataset arrows --split_data "eval" --colors "tab:red" "tab:green" "tab:purple" "tab:orange" "tab:blue"
 #python3 generate_data.py --n_examples 2000 --dataset_name 7_c --n_arrows 7 --dataset arrows --split_data "eval" --colors "tab:red" "tab:green" "tab:purple" "tab:orange" "tab:blue"
-
