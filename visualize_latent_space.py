@@ -18,7 +18,7 @@ parser.add_argument('--dataset', type=str, default='dataset', help='Dataset')
 parser.add_argument('--dataset_name', nargs="+", type=str, default=['4'], help='Dataset name')
 args_eval = parser.parse_args()
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:"+args_eval.gpu if torch.cuda.is_available() else "cpu")
 # torch.manual_seed(42)
 torch.cuda.empty_cache()
 

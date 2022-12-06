@@ -7,6 +7,7 @@ def get_args():
     parser.add_argument('--seed', type=int, default=42, help="Set seed for training")
 
     # Training details
+    parser.add_argument("--gpu", type=str, default="0", help="GPU to use")
     parser.add_argument('--epochs', type=int, default=100)
     parser.add_argument('--log-interval', type=int, default=10)
     parser.add_argument('--val-interval', type=int, default=10)

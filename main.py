@@ -29,7 +29,7 @@ print(args)
 # Print set up torch device, empty cache and set random seed
 torch.cuda.empty_cache()
 # torch.manual_seed(args.seed)
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:"+args.gpu if torch.cuda.is_available() else "cpu")
 print('Using device: ', device)
 # endregion
 
@@ -126,12 +126,6 @@ identity_loss_function = IdentityLoss(args.identity_loss, temperature=args.tau)
 equiv_loss_train_function = EquivarianceLoss(args.equiv_loss)
 equiv_loss_val_function = EquivarianceLoss("chamfer_val")
 # endregion
-
-def matrix_dist(z_mean_next, z_mean_pred, latent_dim):
-    if latent_dim == 2:
-        return ((z_mean_next.unsqueeze(2) - z_mean_pred.unsqueeze(1)) ** 2).sum(-1)
-    elif latent_dim == 3:
-        return ((z_mean_next.unsqueeze(2) - z_mean_pred.unsqueeze(1)) ** 2).sum(-1).sum(-1)
 
 
 def train(epoch, data_loader, mode='train'):
