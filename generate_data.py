@@ -40,9 +40,15 @@ def generate_dataset(dataset):
         generation_parameters = dict(num_arrows_list=args.n_arrows, color_list=args.colors, style_list=args.styles,
                                      dataset_folder="./data/consecutive_arrows",
                                      dataset_name=args.dataset_name,
-
                                      )
-        rotating_arrows.generate_training_data(**generation_parameters, examples_per_num_arrows=args.n_examples, consecutive=True)
+        rotating_arrows.generate_training_data(**generation_parameters, examples_per_num_arrows=args.n_examples, type_pairs="consecutive")
+        rotating_arrows.generate_eval_data(**generation_parameters)
+    elif dataset == "consecutive_random_arrows":
+        generation_parameters = dict(num_arrows_list=args.n_arrows, color_list=args.colors, style_list=args.styles,
+                                     dataset_folder="./data/consecutive_random_arrows",
+                                     dataset_name=args.dataset_name,
+                                     )
+        rotating_arrows.generate_training_data(**generation_parameters, examples_per_num_arrows=args.n_examples, type_pairs="consecutive_random")
         rotating_arrows.generate_eval_data(**generation_parameters)
 
 

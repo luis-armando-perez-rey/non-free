@@ -6,14 +6,14 @@ from typing import List, Optional
 import pickle
 import scipy
 
-
 class EquivDataset(torch.utils.data.Dataset):
     def __init__(self, path: str, list_dataset_names=None, greyscale: bool = False,
-                 max_data_per_dataset: int = -1):
+                 max_data_per_dataset: int = -1, so3_matrices: bool = False):
         if list_dataset_names is None:
             list_dataset_names = ["equiv"]
         print(f"Loading the datasets {list_dataset_names}")
         data = np.load(path + list_dataset_names[0] + '_data.npy', mmap_mode='r+')
+
         lbls = np.load(path + list_dataset_names[0] + '_lbls.npy', mmap_mode='r+')
         if max_data_per_dataset > 0:
             num_selected_data = np.min([max_data_per_dataset, len(data)])
@@ -28,7 +28,7 @@ class EquivDataset(torch.utils.data.Dataset):
         for dataset_name in list_dataset_names[1:]:
             data = np.load(path + dataset_name + '_data.npy', mmap_mode='r+')
             lbls = np.load(path + dataset_name + '_lbls.npy', mmap_mode='r+')
-            if max_data_per_dataset is not None:
+            if max_data_per_dataset > 0:
                 num_selected_data = np.min([max_data_per_dataset, len(data)])
                 if max_data_per_dataset > len(data):
                     print(
@@ -37,6 +37,8 @@ class EquivDataset(torch.utils.data.Dataset):
                 lbls = lbls[:num_selected_data]
             self.data = np.concatenate([self.data, data], axis=0)
             self.lbls = np.concatenate([self.lbls, lbls], axis=0)
+        if so3_matrices:
+            self.lbls = self.angles2so3(self.lbls)
         self.greyscale = greyscale
 
     def __getitem__(self, index):
@@ -46,9 +48,26 @@ class EquivDataset(torch.utils.data.Dataset):
         else:
             return torch.FloatTensor(self.data[index, 0]), torch.FloatTensor(self.data[index, 1]), torch.FloatTensor(
                 (self.lbls[index],))
-
     def __len__(self):
         return len(self.data)
+    @staticmethod
+    def angles2so3(angles):
+        """
+        Converts a vector of angles to a rotation matrix about the z axis
+        :param angles: vector of angles in radians
+        :return: rotation matrix
+        """
+        # Initialize rotation matrix
+        rotation_matrix = np.zeros((angles.shape[0], 3, 3), dtype = angles.dtype)
+        # Fill out matrix entries
+        cos_angle = np.cos(angles)
+        sin_angle = np.sin(angles)
+        rotation_matrix[:, 0, 0] = cos_angle
+        rotation_matrix[:, 0, 1] = -sin_angle
+        rotation_matrix[:, 1, 0] = sin_angle
+        rotation_matrix[:, 1, 1] = cos_angle
+        rotation_matrix[:, 2, 2] = 1.
+        return rotation_matrix
 
 
 class EquivDatasetStabs(EquivDataset):
@@ -58,8 +77,8 @@ class EquivDatasetStabs(EquivDataset):
     """
 
     def __init__(self, path: str, list_dataset_names: List[str] = ["equiv"], greyscale: bool = False,
-                 max_data_per_dataset: int = -1):
-        super().__init__(path, list_dataset_names, greyscale, max_data_per_dataset)
+                 max_data_per_dataset: int = -1, so3_matrices: bool = False):
+        super().__init__(path, list_dataset_names, greyscale, max_data_per_dataset, so3_matrices)
         for dataset_name in list_dataset_names:
             assert os.path.exists(
                 path + dataset_name + '_stabilizers.npy'), f"{dataset_name}_stabilizers.npy cardinality file not found"

@@ -106,12 +106,10 @@ class ArrowCanvas:
         plt.show()
 
 
-
-
 def generate_training_data(num_arrows_list, dataset_folder, dataset_name, style_list: Optional[List[str]] = None,
                            color_list: Optional[List[str]] = None, radius_list: Optional[List[float]] = None,
                            examples_per_num_arrows: int = 100,
-                           resolution=(64, 64), multicolor=False, consecutive=False):
+                           resolution=(64, 64), multicolor=False, type_pairs="random"):
     equiv_data = []
     equiv_lbls = []
     equiv_stabilizers = []
@@ -127,6 +125,11 @@ def generate_training_data(num_arrows_list, dataset_folder, dataset_name, style_
         for style in style_list:
             for color in color_list:
                 for radius in radius_list:
+                    # Random permutation of examples_per_num_arrows first integers
+                    random_index_angles = np.arange(examples_per_num_arrows)
+                    np.random.shuffle(random_index_angles)
+                    # Possible angles for type of pairs consecutive and restricted random
+                    possible_angles = np.linspace(0, 2 * np.pi, examples_per_num_arrows, endpoint=False)
                     for num_example in range(examples_per_num_arrows):
                         print(
                             "Generating image with num arrows {}, style {}, color {}, radius {}, multicolor {}, "
@@ -134,14 +137,20 @@ def generate_training_data(num_arrows_list, dataset_folder, dataset_name, style_
                                 num_arrows, style, color, radius, multicolor, num_example))
                         c1 = ArrowCanvas(resolution=resolution)
                         c2 = ArrowCanvas(resolution=resolution)
-                        if consecutive:
-                            possible_angles = np.linspace(0, 2 * np.pi, examples_per_num_arrows+1, endpoint=False)
-                            angle1 = possible_angles[num_example]
-                            angle2 = possible_angles[num_example + 1]
+                        if type_pairs == "consecutive":
+                            angle1 = possible_angles[num_example % examples_per_num_arrows]
+                            angle2 = possible_angles[(num_example + 1) % examples_per_num_arrows]
                             print(angle1, angle2)
-                        else:
+                        elif type_pairs == "consecutive_random":
+                            angle1 = possible_angles[random_index_angles[num_example % examples_per_num_arrows]]
+                            angle2 = possible_angles[random_index_angles[(num_example + 1) % examples_per_num_arrows]]
+                            print(angle1, angle2)
+                        elif type_pairs == "random":
                             angle1 = 2 * np.pi * np.random.random()
                             angle2 = 2 * np.pi * np.random.random()
+                        else:
+                            raise ValueError(
+                                "Invalid type of pairs, valid options are consecutive, consecutive_random, random")
 
                         if multicolor:
                             assert len(
@@ -157,14 +166,14 @@ def generate_training_data(num_arrows_list, dataset_folder, dataset_name, style_
                             c2.add_arrows(rotation_rad=angle2, num_arrows=num_arrows, color=color,
                                           radius=radius, style=style)
 
-                        img1 = c1.numpy_torch_img
-                        img2 = c2.numpy_torch_img
-                        angle = angle2 - angle1
+                            img1 = c1.numpy_torch_img
+                            img2 = c2.numpy_torch_img
+                            angle = angle2 - angle1
 
-                        equiv_data.append([img1, img2])
-                        equiv_lbls.append(angle)
-                        equiv_stabilizers.append(num_arrows)
-                        plt.close("all")
+                            equiv_data.append([img1, img2])
+                            equiv_lbls.append(angle)
+                            equiv_stabilizers.append(num_arrows)
+                            plt.close("all")
     equiv_data = np.array(equiv_data)
     equiv_lbls = np.array(equiv_lbls)
     equiv_stabilizers = np.array(equiv_stabilizers)
@@ -175,8 +184,6 @@ def generate_training_data(num_arrows_list, dataset_folder, dataset_name, style_
     np.save(os.path.join(dataset_folder, dataset_name + '_data.npy'), equiv_data)
     np.save(os.path.join(dataset_folder, dataset_name + '_lbls.npy'), equiv_lbls)
     np.save(os.path.join(dataset_folder, dataset_name + '_stabilizers.npy'), equiv_stabilizers)
-
-
 
 
 def generate_eval_data(num_arrows_list, dataset_folder, dataset_name, style_list: Optional[List[str]] = None,

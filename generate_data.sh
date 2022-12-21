@@ -15,7 +15,14 @@
 #python3 generate_data.py --n_examples 5000 --dataset_name 4 --n_arrows 4 --dataset arrows
 #python3 generate_data.py --n_examples 5000 --dataset_name 5 --n_arrows 5 --dataset arrows
 #python3 generate_data.py --n_examples 5000 --dataset_name 6 --n_arrows 6 --dataset arrows
-python generate_data.py --n_examples 2500 --dataset_name 5 --n_arrows 5 --dataset arrows
+
+python generate_data.py --n_examples 4500 --dataset_name 3 --n_arrows 3 --dataset arrows
+#python generate_data.py --n_examples 4500 --dataset_name 5 --n_arrows 5 --dataset arrows
+#python generate_data.py --n_examples 4500 --dataset_name 6 --n_arrows 6 --dataset arrows
+#python generate_data.py --n_examples 500 --dataset_name 4_val --n_arrows 4 --dataset arrows
+#python generate_data.py --n_examples 500 --dataset_name 5_val --n_arrows 5 --dataset arrows
+#python generate_data.py --n_examples 500 --dataset_name 6_val --n_arrows 6 --dataset arrows
+
 #python3 generate_data.py --n_examples 5000 --dataset_name 2_3 --n_arrows 2 3 --dataset double_arrows
 #python3 generate_data.py --n_examples 1 --dataset_name test --dataset rotating_mnist
 #python3 generate_data.py --n_examples 1000 --dataset_name stochastic_mnist --dataset rotating_mnist_stochastic
@@ -38,7 +45,7 @@ python generate_data.py --n_examples 2500 --dataset_name 5 --n_arrows 5 --datase
 #python3 generate_data.py --n_examples 2000 --dataset_name bottle_0 --dataset modelnet
 #python3 generate_data.py --n_examples 2000 --dataset_name stool_2 --dataset modelnet
 #python3 generate_data.py --n_examples 1000 --dataset_name stool_1 --dataset modelnet
-#python3 generate_data.py --n_examples 10000 --n_arrows 1 --dataset_name cube --dataset symmetric_solids
+#python3 generate_data.py --n_examples 10000 --n_arrows 0 --dataset_name tetrahedron --dataset symmetric_solids
 
 #python3 generate_data.py --n_examples 10000 --dataset_name 1 --n_arrows 1 --dataset square_translation
 #python3 generate_data.py --n_examples 20000 --dataset_name 1_1 --n_arrows 1 1 --dataset sinusoidal_translation

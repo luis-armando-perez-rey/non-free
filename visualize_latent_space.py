@@ -18,15 +18,16 @@ parser.add_argument('--dataset', type=str, default='dataset', help='Dataset')
 parser.add_argument('--dataset_name', nargs="+", type=str, default=['4'], help='Dataset name')
 args_eval = parser.parse_args()
 
-device = torch.device("cuda:"+args_eval.gpu if torch.cuda.is_available() else "cpu")
-# torch.manual_seed(42)
-torch.cuda.empty_cache()
+
 
 model_dir = os.path.join(".", "saved_models", args_eval.save_folder)
 model_file = os.path.join(model_dir, 'model.pt')
 decoder_file = os.path.join(model_dir, 'decoder.pt')
 meta_file = os.path.join(model_dir, 'metadata.pkl')
 args = pickle.load(open(meta_file, 'rb'))['args']
+device = torch.device("cuda:"+args.gpu if torch.cuda.is_available() else "cpu")
+# torch.manual_seed(42)
+torch.cuda.empty_cache()
 print(args)
 save_folder = os.path.join(".", "visualizations", args.model_name)
 os.makedirs(save_folder, exist_ok=True)
@@ -60,14 +61,14 @@ model.eval()
 img, img_next, action, n_stabilizers = next(iter(train_loader))
 mean_eval, logvar_eval, extra_eval = model(torch.FloatTensor(eval_dset.flat_images).to(device))
 img_shape = np.array(img.shape[1:])
-# endregion
-
 
 # Get the numpy array versions of the images
 npimages = torch_data_to_numpy(img)
 npimages_next = torch_data_to_numpy(img_next)
 npimages_eval = eval_dset.flat_images_numpy
+# endregion
 
+# region POSTERIOR PARAMETERS
 # Calculate the parameters obtained by the models
 mean, logvar, extra = model(img.to(device))
 extra = extra.detach().cpu().numpy()
@@ -82,6 +83,9 @@ mean_numpy = mean.detach().cpu().numpy()
 mean_next = mean_next.detach().cpu().numpy()
 std = np.exp(logvar.detach().cpu().numpy() / 2.) / 10
 std_next = np.exp(logvar_next.detach().cpu().numpy() / 2.) / 10
+# endregion
+
+
 
 # Plotting for SO(2) and its combinations
 if args.latent_dim == 2 or args.latent_dim == 4:
