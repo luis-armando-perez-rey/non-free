@@ -44,7 +44,7 @@ class ArrowCanvas:
     @staticmethod
     def get_mutation_scale(num_arrows):
         if num_arrows == 1:
-            return 100
+            return 200
         else:
             return 100
 

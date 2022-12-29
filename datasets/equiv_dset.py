@@ -69,6 +69,35 @@ class EquivDataset(torch.utils.data.Dataset):
         rotation_matrix[:, 2, 2] = 1.
         return rotation_matrix
 
+    @property
+    def flat_images(self):
+        return self.data.reshape(-1, *self.data.shape[2:])
+
+    @property
+    def flat_images_numpy(self):
+        return np.transpose(self.flat_images, axes=(0, 2, 3, 1))
+
+    @property
+    def flat_stabs(self):
+        if len(self.stabs.shape) == 3:
+            return self.stabs.reshape(-1, self.stabs.shape[-1])
+        else:
+            return self.stabs.reshape((-1))
+
+    @property
+    def flat_lbls(self):
+        if self.lbls is not None:
+            if len(self.lbls.shape) == 3:
+                return self.lbls.reshape(-1, self.lbls.shape[-1])
+            else:
+                return self.lbls.reshape((-1))
+        else:
+            return None
+
+    @property
+    def num_objects(self):
+        return self.data.shape[0]
+
 
 class EquivDatasetStabs(EquivDataset):
     """
@@ -109,6 +138,8 @@ class EquivDatasetStabs(EquivDataset):
             return torch.FloatTensor(self.data[index, 0]), torch.FloatTensor(self.data[index, 1]), torch.FloatTensor(
                 (self.lbls[index],)), torch.FloatTensor((
                 self.stabs[index],))
+
+
 
 
 class EvalDataset(torch.utils.data.Dataset):

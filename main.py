@@ -10,13 +10,12 @@ from utils.plotting_utils import save_embeddings_on_circle
 from models.losses import EquivarianceLoss, ReconstructionLoss, IdentityLoss, estimate_entropy
 from models.distributions import MixtureDistribution, get_prior, get_z_values
 
-
-
 # region PARSE ARGUMENTS
 parser = get_args()
 args = parser.parse_args()
 if args.neptune_user != "":
     from utils.neptune_utils import initialize_neptune_run, save_sys_id
+
     run = initialize_neptune_run(args.neptune_user, "non-free")
     run["parameters"] = vars(args)
 else:
@@ -29,7 +28,7 @@ print(args)
 # Print set up torch device, empty cache and set random seed
 torch.cuda.empty_cache()
 # torch.manual_seed(args.seed)
-device = torch.device("cuda:"+args.gpu if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:" + args.gpu if torch.cuda.is_available() else "cpu")
 print('Using device: ', device)
 # endregion
 
@@ -48,8 +47,6 @@ if run is not None:
     neptune_id_path = os.path.join(model_path, 'neptune.txt')
     save_sys_id(run, neptune_id_path)
 
-
-
 # endregion
 
 # region SAVE METADATA
@@ -62,18 +59,24 @@ if args.dataset == 'platonics':
     dset = PlatonicMerged(N=30000, data_dir=args.data_dir)
 else:
     print(f"Loading dataset {args.dataset} with dataset name {args.dataset_name}")
-    dset = EquivDataset(f'{args.data_dir}/{args.dataset}/', list_dataset_names=args.dataset_name, max_data_per_dataset=args.ndatapairs)
+    dset = EquivDataset(f'{args.data_dir}/{args.dataset}/', list_dataset_names=args.dataset_name,
+                        max_data_per_dataset=args.ndatapairs)
+
+    dset_val = EquivDataset(f'{args.data_dir}/{args.dataset}/',
+                            list_dataset_names=[dataset_name + "_val" for dataset_name in args.dataset_name],
+                            max_data_per_dataset=-1)
     if args.dataset != "symmetric_solids":
         dset_eval = EvalDataset(f'{args.data_dir}/{args.dataset}/', list_dataset_names=args.dataset_name)
         eval_images = torch.FloatTensor(dset_eval.data.reshape(-1, dset_eval.data.shape[-1]))
         stabilizers = dset_eval.stabs.reshape((-1))
 
 # Setup torch dataset
-dset, dset_test = torch.utils.data.random_split(dset, [len(dset) - int(len(dset) / 10), int(len(dset) / 10)])
+# dset, dset_val = torch.utils.data.random_split(dset, [len(dset) - int(len(dset) / 10), int(len(dset) / 10)])
 train_loader = torch.utils.data.DataLoader(dset, batch_size=args.batch_size, shuffle=True)
-val_loader = torch.utils.data.DataLoader(dset_test, batch_size=args.batch_size, shuffle=True)
+val_loader = torch.utils.data.DataLoader(dset_val, batch_size=args.batch_size, shuffle=True)
+
 print("# train set:", len(dset))
-print("# test set:", len(dset_test))
+print("# test set:", len(dset_val))
 
 # Sample data
 img, _, acn = next(iter(train_loader))
@@ -125,12 +128,16 @@ invariant_loss = []
 identity_loss_function = IdentityLoss(args.identity_loss, temperature=args.tau)
 equiv_loss_train_function = EquivarianceLoss(args.equiv_loss)
 equiv_loss_val_function = EquivarianceLoss("chamfer_val")
+
+
 # endregion
 
 
 def train(epoch, data_loader, mode='train'):
     mu_loss = 0
     mu_rec_loss = 0
+    mu_equiv_loss = 0
+    mu_id_loss = 0
     global_step = len(data_loader) * epoch
 
     # Chamfer distance is used for validation
@@ -143,9 +150,6 @@ def train(epoch, data_loader, mode='train'):
 
     # Initialize the losses that will be used for logging with Neptune
     total_batches = len(data_loader)
-    epoch_loss_rec = 0
-    epoch_loss_equiv = 0
-    epoch_loss_identity = 0
 
     for batch_idx, (image, img_next, action) in enumerate(data_loader):
         batch_size = image.shape[0]
@@ -196,16 +200,18 @@ def train(epoch, data_loader, mode='train'):
         p_pred = MixtureDistribution(z_mean_pred, z_logvar, args.enc_dist)
         loss_equiv = args.weightequivariance * equiv_loss_function(p_next, p_pred)
         losses = [loss_equiv]
-        epoch_loss_equiv += loss_equiv.item()
+        mu_equiv_loss += loss_equiv.item()
         if run is not None:
-            run[mode+"/batch/loss_equiv"].log(loss_equiv)
+            run[mode + "/batch/loss_equiv"].log(loss_equiv)
 
         # region CALCULATE IDENTITY LOSS
         if extra_dim > 0:
             loss_identity = identity_loss_function(extra, extra_next)
             losses.append(loss_identity)
             if run is not None:
-                run[mode+"/batch/loss_identity"].log(loss_identity)
+                run[mode + "/batch/loss_identity"].log(loss_identity)
+        else:
+            loss_identity = 0
         # endregion
 
         # region CALCULATE RECONSTRUCTION LOSS
@@ -229,13 +235,13 @@ def train(epoch, data_loader, mode='train'):
             else:
                 x_rec = dec(torch.cat([z_mean.view((z_mean.shape[0], -1)), extra], dim=-1).detach())
                 reconstruction_loss += rec_loss_function(x_rec, image).mean()
-            #TODO: Review if this helps
+            # TODO: Review if this helps
             # x_rec_next = dec(torch.cat([z_mean_next.view((z_mean.shape[0], -1)), extra], dim=-1).detach())
             # reconstruction_loss += rec_loss_function(x_rec_next, img_next).mean()
 
             losses.append(reconstruction_loss)
             if run is not None:
-                run[mode+"/batch/reconstruction"].log(reconstruction_loss)
+                run[mode + "/batch/reconstruction"].log(reconstruction_loss)
         # endregion
 
         # region CALCULATE KL LOSS
@@ -257,7 +263,7 @@ def train(epoch, data_loader, mode='train'):
         else:
             loss = None
         if run is not None:
-            run[mode+"/batch/loss"].log(loss)
+            run[mode + "/batch/loss"].log(loss)
 
         # region LOGGING LOSS
         # Print loss progress
@@ -269,7 +275,8 @@ def train(epoch, data_loader, mode='train'):
                       f"Identity: {loss_identity:.3f}\t")
             else:
                 print(
-                    f"{mode.upper()} Epoch: {epoch}, Batch: {batch_idx} of {len(data_loader)} Loss: {loss:.3f} Loss equiv:"
+                    f"{mode.upper()} Epoch: {epoch}, Batch: {batch_idx} of {len(data_loader)} Loss: {loss:.3f} Loss "
+                    f"equiv: "
                     f" {loss_equiv:.3}")
         elif args.autoencoder.startswith("ae"):
             if extra_dim > 0:
@@ -280,17 +287,20 @@ def train(epoch, data_loader, mode='train'):
                       f"Reconstruction: {reconstruction_loss:.3f}\t")
             else:
                 print(
-                    f"{mode.upper()} Epoch: {epoch}, Batch: {batch_idx} of {len(data_loader)} Loss: {loss:.3f} Loss equiv:"
+                    f"Epoch: {epoch}, Batch: {batch_idx} of {len(data_loader)} Loss: {loss:.3f} Loss "
+                    f"equiv: "
                     f" {loss_equiv:.3} Loss reconstruction: {reconstruction_loss:.3}")
         elif args.autoencoder == "vae":
             if extra_dim > 0:
                 print(
-                    f"{mode.upper()} Epoch: {epoch}, Batch: {batch_idx} of {len(data_loader)} Loss: {loss:.3f} Loss equiv:"
-                    f" {loss_equiv:.3} Loss reconstruction: {reconstruction_loss:.3} Loss KL: {kl_loss:.3} "
-                    f"Loss identity: {loss_identity:.3}")
+                    f"Epoch: {epoch}, Batch: {batch_idx} of {len(data_loader)} Loss: {loss:.3f} Loss "
+                    f"equiv: "
+                    f" {loss_equiv:.3f} Loss reconstruction: {reconstruction_loss:.3f} Loss KL: {kl_loss:.3f} "
+                    f"Loss identity: {loss_identity:.3f}")
             else:
                 print(
-                    f"{mode.upper()} Epoch: {epoch}, Batch: {batch_idx} of {len(data_loader)} Loss: {loss:.3f} Loss equiv:"
+                    f" Epoch: {epoch}, Batch: {batch_idx} of {len(data_loader)} Loss: {loss:.3f} Loss "
+                    f"equiv: "
                     f" {loss_equiv:.3} Loss reconstruction: {reconstruction_loss:.3} Loss KL: {kl_loss:.3}")
         # endregion
 
@@ -300,9 +310,6 @@ def train(epoch, data_loader, mode='train'):
         if mode == 'train':
             loss.backward()
             optimizer.step()
-
-    mu_loss /= total_batches
-    mu_rec_loss /= total_batches
 
     if mode == 'val':
         errors.append(mu_loss)
@@ -336,18 +343,18 @@ def train(epoch, data_loader, mode='train'):
     sys.stdout.flush()
 
     # Get each loss component to be logged by Neptune
-    epoch_loss = mu_loss
-    epoch_loss_rec = epoch_loss_rec / total_batches
-    epoch_loss_equiv = epoch_loss_equiv / total_batches
-    epoch_loss_identity = epoch_loss_identity / total_batches
-    if run is not None:
-        run[mode+"/epoch/loss"].log(epoch_loss)
-        if args.autoencoder != "None":
-            run[mode+"/epoch/reconstruction"].log(epoch_loss_rec)
-        run[mode+"/epoch/equivariance"].log(epoch_loss_equiv)
-        if extra_dim > 0:
-            run[mode+"/epoch/identity"].log(epoch_loss_identity)
+    mu_loss /= total_batches
+    mu_rec_loss /= total_batches
+    mu_equiv_loss /= total_batches
+    mu_id_loss /= total_batches
 
+    if run is not None:
+        run[mode + "/epoch/loss"].log(mu_loss)
+        if args.autoencoder != "None":
+            run[mode + "/epoch/reconstruction"].log(mu_rec_loss)
+        run[mode + "/epoch/equivariance"].log(mu_equiv_loss)
+        if extra_dim > 0:
+            run[mode + "/epoch/identity"].log(mu_id_loss)
 
 
 if __name__ == "__main__":

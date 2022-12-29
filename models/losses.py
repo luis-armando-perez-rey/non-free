@@ -200,7 +200,10 @@ class ReconstructionLoss:
             def reconstruction_loss(input_data, target):
                 loss = torch.nn.functional.binary_cross_entropy_with_logits(input_data, target, reduction="none")
                 # Sum over data dimensions
-                loss = torch.sum(loss, dim=tuple(range(1, len(loss.shape))))
+                #TODO: Review if averaging is correct
+                loss = torch.mean(loss,dim=tuple(range(1, len(loss.shape))) )
+                # loss = torch.sum(loss, dim=tuple(range(1, len(loss.shape))))
+
                 return loss
         else:
             raise ValueError(f"Reconstruction loss {loss_type} not implemented")
