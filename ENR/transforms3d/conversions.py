@@ -30,7 +30,7 @@ def rotation_matrix_y(angle):
     return rotation_matrix
 
 
-def rotation_matrix_z(angle):
+def rotation_matrix_z(angle, device=None):
     """Returns rotation matrix about z-axis.
 
     Args:

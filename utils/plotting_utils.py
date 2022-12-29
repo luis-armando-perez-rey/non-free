@@ -88,7 +88,6 @@ def add_distribution_to_ax(mean, std, ax, n: int, title=None, color=None, dist_t
         print(
             f"WARNING: Not enough available colors {len(colors)} for each distribution location ({n} distributions used). Will repeat colors")
     for j in range(n):
-
         ellipse_j = Ellipse(xy=(mean[j, 0], mean[j, 1]), width=std[j, 0], height=std[j, 1],
                             color=colors[j % len(colors)],
                             linewidth=15, alpha=0.8)
@@ -248,7 +247,7 @@ def add_scatter_to_ax(mean, ax, color=None, size=120, marker="*", alpha=1.0):
 
 
 def plot_images_distributions(mean, std, mean_next, std_next, image,
-                              image_next, expected_mean, n):
+                              image_next, expected_mean, n, set_limits=True):
     fig, axes = plt.subplots(2, 2, figsize=(10, 10))
 
     # Plot first image
@@ -260,21 +259,24 @@ def plot_images_distributions(mean, std, mean_next, std_next, image,
     # Plot encoded distribution for first image
     if mean.shape[-1] == 4:
         add_distribution_to_ax_torus(mean, std, axes[1, 0], n, title='before rotation')
-        axes[1, 0].set_xlim(-np.pi, np.pi)
-        axes[1, 0].set_ylim(-np.pi, np.pi)
+        if set_limits:
+            axes[1, 0].set_xlim(-np.pi, np.pi)
+            axes[1, 0].set_ylim(-np.pi, np.pi)
         axes[1, 0].set_xlabel("Angle of torus 1")
         axes[1, 0].set_xlabel("Angle of torus 2")
     else:
         add_distribution_to_ax(mean, std, axes[1, 0], n, title='before rotation')
         add_unit_circle_to_ax(axes[1, 0])
-        axes[1, 0].set_xlim(-1.2, 1.2)
-        axes[1, 0].set_ylim(-1.2, 1.2)
+        if set_limits:
+            axes[1, 0].set_xlim(-1.2, 1.2)
+            axes[1, 0].set_ylim(-1.2, 1.2)
 
     # Plot encoded distribution for second image
     if mean.shape[-1] == 4:
         add_distribution_to_ax_torus(mean_next, std_next, axes[1, 1], n, title='after rotation')
-        axes[1, 1].set_xlim(-np.pi, np.pi)
-        axes[1, 1].set_ylim(-np.pi, np.pi)
+        if set_limits:
+            axes[1, 1].set_xlim(-np.pi, np.pi)
+            axes[1, 1].set_ylim(-np.pi, np.pi)
         axes[1, 1].set_xlabel("Angle of torus 1")
         axes[1, 1].set_xlabel("Angle of torus 2")
         expected_angles = np.stack([np.arctan2(expected_mean[:, 1], expected_mean[:, 0]),
@@ -283,8 +285,9 @@ def plot_images_distributions(mean, std, mean_next, std_next, image,
     else:
         add_distribution_to_ax(mean_next, std_next, axes[1, 1], n, title='after rotation')
         add_unit_circle_to_ax(axes[1, 1])
-        axes[1, 1].set_xlim(-1.2, 1.2)
-        axes[1, 1].set_ylim(-1.2, 1.2)
+        if set_limits:
+            axes[1, 1].set_xlim(-1.2, 1.2)
+            axes[1, 1].set_ylim(-1.2, 1.2)
         add_scatter_to_ax(expected_mean, axes[1, 1])
 
     return fig, axes
@@ -356,6 +359,8 @@ def save_embeddings_on_circle(mean, std, stabilizers, save_folder: str, dataset_
                               increasing_radius=False):
     n_gaussians = mean.shape[1]  # Assume mean has shape (total_data, num_gaussians, latent)
     latent_dim = mean.shape[-1]
+    print("Total gaussians: ", n_gaussians, "Latent dim: ", latent_dim)
+    figures = []
     if latent_dim == 2:
         for num_unique, unique in enumerate(np.unique(stabilizers)):
             print("Plotting embeddings for stabilizer {}".format(unique))
@@ -368,7 +373,6 @@ def save_embeddings_on_circle(mean, std, stabilizers, save_folder: str, dataset_
             if dataset_name.endswith("m"):
                 print("Plotting stabilizers equal to 1")
                 stabs = np.ones_like(stabilizers[boolean_selection])
-
             else:
                 stabs = stabilizers[boolean_selection]
             fig, axes = plot_embeddings_eval(location, scale, n_gaussians, stabs, increasing_radius)
@@ -382,8 +386,9 @@ def save_embeddings_on_circle(mean, std, stabilizers, save_folder: str, dataset_
                 filename = f"{unique}_eval_embeddings.png"
                 axes.set_xlim([-1.2, 1.2])
                 axes.set_ylim([-1.2, 1.2])
+            figures.append(fig)
 
-            fig.savefig(os.path.join(save_folder, filename), bbox_inches='tight')
+            # fig.savefig(os.path.join(save_folder, filename), bbox_inches='tight')
     elif latent_dim == 4:
         for num_subgroup in range(stabilizers.shape[-1]):
             for num_unique, unique in enumerate(np.unique(stabilizers[:, num_subgroup])):
@@ -407,6 +412,8 @@ def save_embeddings_on_circle(mean, std, stabilizers, save_folder: str, dataset_
                     axes.set_ylim([-1.2, 1.2])
                 fig.savefig(os.path.join(save_folder, filename),
                             bbox_inches='tight')
+                figures.append(fig)
+    return figures
 
 
 # Plotting results
