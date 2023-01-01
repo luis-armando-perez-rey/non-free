@@ -49,7 +49,7 @@ class MixtureDistribution(D.MixtureSameFamily):
     @components.setter
     def components(self, encoder_distribution_type: str):
         if encoder_distribution_type == "gaussian-mixture":
-            components = D.Independent(D.Normal(self.input_mean, torch.exp(self.input_logvar)), 1)
+            components = D.Independent(D.Normal(self.input_mean, torch.exp(self.input_logvar / 2.0)), 1)
         elif encoder_distribution_type == "von-mises-mixture":
             angle = torch.atan2(self.input_mean[..., -2], self.input_mean[..., -1])
             components = D.von_mises.VonMises(loc=angle, concentration=1 / torch.exp(self.input_logvar[..., -1]))

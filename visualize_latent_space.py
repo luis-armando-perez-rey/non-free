@@ -74,14 +74,21 @@ mean, logvar, extra = model(img.to(device))
 extra = extra.detach().cpu().numpy()
 mean_next, logvar_next, extra_next = model(img_next.to(device))
 extra_next = extra_next.detach().cpu().numpy()
-logvar = -4.6 * torch.ones(logvar.shape).to(logvar.device)
-logvar_eval = -4.6 * torch.ones(logvar_eval.shape).to(logvar_eval.device)
+if not(args.variablescale):
+    logvar = -4.6 * torch.ones(logvar.shape).to(logvar.device)
+    logvar_eval = -4.6 * torch.ones(logvar_eval.shape).to(logvar_eval.device)
 std_eval = np.exp(logvar_eval.detach().cpu().numpy() / 2.) / 10
+
+# Plot the distribution of standard deviation values
+if run is not None:
+    plt.hist(std_eval.flatten())
+    run["eval_std_hist"].upload(plt.gcf())
 
 # Obtain the values as numpy arrays
 mean_numpy = mean.detach().cpu().numpy()
 mean_next = mean_next.detach().cpu().numpy()
 std = np.exp(logvar.detach().cpu().numpy() / 2.) / 10
+print("Distribution of the standard deviations", np.unique(std * 10))
 std_next = np.exp(logvar_next.detach().cpu().numpy() / 2.) / 10
 # endregion
 
@@ -111,14 +118,14 @@ if args.latent_dim == 2 or args.latent_dim == 4:
                                               expected_mean=mean_rot[i], n=args.num)
         plt.savefig(os.path.join(save_folder, f"image_pair_{i}.png"), bbox_inches='tight')
         if run is not None:
-            run[f"image_pair_{i}"].upload(fig)
+            run[f"image_pair_{i}"].upload(plt.gcf())
         plot_mixture_neurreps(mean_numpy[i])
         if run is not None:
-            run[f"test_mixture_{i}"].upload(fig)
+            run[f"test_mixture_{i}"].upload(plt.gcf())
         plt.savefig(os.path.join(save_folder, f"test_mixture_{i}.png"), bbox_inches='tight')
         add_image_to_ax(npimages[i])
         if run is not None:
-            run[f"image_{i}"].upload(fig)
+            run[f"image_{i}"].upload(plt.gcf())
         plt.savefig(os.path.join(save_folder, f"test_image_{i}.png"), bbox_inches='tight')
         if args.latent_dim == 4:
             fig, ax = plt.subplots(1, 1, figsize=(5, 5))

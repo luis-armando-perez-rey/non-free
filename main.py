@@ -174,8 +174,9 @@ def train(epoch, data_loader, mode='train'):
         z_mean_next, z_logvar_next, extra_next = model(img_next)
         # TODO: Allow for different scale values
         # WARNING!! Notice that the scale parameter is being fixed!!!
-        z_logvar = -4.6 * torch.ones(z_logvar.shape).to(z_logvar.device)
-        z_logvar_next = -4.6 * torch.ones(z_logvar.shape).to(z_logvar.device)
+        if not(args.variablescale):
+            z_logvar = -4.6 * torch.ones(z_logvar.shape).to(z_logvar.device)
+            z_logvar_next = -4.6 * torch.ones(z_logvar.shape).to(z_logvar.device)
 
         # Rotate the embeddings in Z_G of the first image by the action
         if args.latent_dim == 2:
@@ -334,7 +335,8 @@ def train(epoch, data_loader, mode='train'):
                 save(dec, decoder_file)
         if (args.plot > 0) & ((epoch % (args.plot + 1)) == 0):
             mean_eval, logvar_eval, extra_eval = model(eval_images.to(device))
-            logvar_eval = -4.6 * torch.ones(logvar_eval.shape).to(logvar_eval.device)
+            if not(args.variablescale):
+                logvar_eval = -4.6 * torch.ones(logvar_eval.shape).to(logvar_eval.device)
             std_eval = np.exp(logvar_eval.detach().cpu().numpy() / 2.) / 10
             plot_save_folder = os.path.join(os.path.join(model_path, "figures"))
             save_embeddings_on_circle(mean_eval, std_eval, stabilizers, plot_save_folder)
