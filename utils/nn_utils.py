@@ -102,3 +102,10 @@ def get_rotated_mean(mean, action, latent_dim):
     else:
         mean_rot = so2_rotate_subspaces(mean, action)
     return mean_rot
+
+
+def hitRate_generic(distance_matrix, batch_size):
+    # distance_matrix = latent_metric(z_pred.unsuqeeze(0), z_pred.unsuqeeze(1))   #shape: (batch batch)
+    _, idxs = torch.min(distance_matrix, dim=0)
+    ordered = torch.arange(start=0, end=batch_size, step=1).to(distance_matrix.device)
+    return torch.eq(idxs, ordered).double().mean()
