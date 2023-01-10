@@ -121,6 +121,7 @@ optimizer = get_optimizer(args.optimizer, args.lr, parameters)
 errors = []
 errors_rec = []
 entropy = []
+equiv_errors = []
 reconstruction_errors = []
 invariant_loss = []
 
@@ -209,6 +210,7 @@ def train(epoch, data_loader, mode='train'):
         if extra_dim > 0:
             loss_identity = identity_loss_function(extra, extra_next)
             losses.append(loss_identity)
+            mu_id_loss += loss_equiv.item()
             if run is not None:
                 run[mode + "/batch/loss_identity"].log(loss_identity)
         else:
@@ -312,8 +314,15 @@ def train(epoch, data_loader, mode='train'):
             loss.backward()
             optimizer.step()
 
+    # Get each loss component to be logged by Neptune
+    mu_loss /= total_batches
+    mu_rec_loss /= total_batches
+    mu_equiv_loss /= total_batches
+    mu_id_loss /= total_batches
+
     if mode == 'val':
         errors.append(mu_loss)
+        equiv_errors.append(mu_equiv_loss)
         errors_rec.append(mu_rec_loss)
         # If the encoding distribution is not None
         if p.components is not None:
@@ -322,6 +331,7 @@ def train(epoch, data_loader, mode='train'):
             invariant_loss.append(loss_identity.item())
             np.save(f'{model_path}/invariant_val.npy', invariant_loss)
         np.save(f'{model_path}/errors_val.npy', errors)
+        np.save(f'{model_path}/equiv_val.npy', equiv_errors)
         np.save(f'{model_path}/entropy_val.npy', entropy)
         np.save(f'{model_path}/errors_rec_val.npy', errors_rec)
 
@@ -344,11 +354,7 @@ def train(epoch, data_loader, mode='train'):
     # Write to standard output. Allows printing to file progress when using HPC
     sys.stdout.flush()
 
-    # Get each loss component to be logged by Neptune
-    mu_loss /= total_batches
-    mu_rec_loss /= total_batches
-    mu_equiv_loss /= total_batches
-    mu_id_loss /= total_batches
+
 
     if run is not None:
         run[mode + "/epoch/loss"].log(mu_loss)
