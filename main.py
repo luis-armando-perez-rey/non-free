@@ -7,7 +7,7 @@ from datasets.equiv_dset import *
 from models.models_nn import *
 from utils.nn_utils import *
 from utils.plotting_utils import save_embeddings_on_circle
-from models.losses import EquivarianceLoss, ReconstructionLoss, IdentityLoss, estimate_entropy
+from models.losses import EquivarianceLoss, ReconstructionLoss, IdentityLoss, estimate_entropy, matrix_dist
 from models.distributions import MixtureDistribution, get_prior, get_z_values
 
 # region PARSE ARGUMENTS
@@ -63,7 +63,7 @@ else:
                         max_data_per_dataset=args.ndatapairs)
 
     dset_val = EquivDataset(f'{args.data_dir}/{args.dataset}/',
-                            list_dataset_names=[dataset_name + "_val" for dataset_name in args.dataset_name],
+                            list_dataset_names=[dataset_name + "_eval" for dataset_name in args.dataset_name],
                             max_data_per_dataset=-1)
     if args.dataset != "symmetric_solids":
         dset_eval = EvalDataset(f'{args.data_dir}/{args.dataset}/', list_dataset_names=args.dataset_name)
@@ -124,12 +124,12 @@ entropy = []
 equiv_errors = []
 reconstruction_errors = []
 invariant_loss = []
+errors_hitrate = []
 
 # region LOSS FUNCTIONS
 identity_loss_function = IdentityLoss(args.identity_loss, temperature=args.tau)
 equiv_loss_train_function = EquivarianceLoss(args.equiv_loss)
 equiv_loss_val_function = EquivarianceLoss("chamfer_val")
-
 
 # endregion
 
@@ -139,6 +139,7 @@ def train(epoch, data_loader, mode='train'):
     mu_rec_loss = 0
     mu_equiv_loss = 0
     mu_id_loss = 0
+    mu_hit_rate = 0
     global_step = len(data_loader) * epoch
 
     # Chamfer distance is used for validation
@@ -181,7 +182,7 @@ def train(epoch, data_loader, mode='train'):
 
         # Rotate the embeddings in Z_G of the first image by the action
         if args.latent_dim == 2:
-            action = action.squeeze(1)
+            action = torch.flatten(action)
             rot = make_rotation_matrix(action)
             # The predicted z_mean after applying the rotation corresponding to the action
             z_mean_pred = (rot @ z_mean.unsqueeze(-1).detach()).squeeze(-1)  # Beware the detach!!!
@@ -222,7 +223,7 @@ def train(epoch, data_loader, mode='train'):
         if args.autoencoder != "None":
             if args.autoencoder == "ae_single":
                 """
-                Decode each of the group representations separately. 
+                Decode each of the group representations separately.
                 """
                 # Get latent variables
                 z = get_z_values(p, extra, args.num, args.autoencoder)
@@ -246,6 +247,17 @@ def train(epoch, data_loader, mode='train'):
             if run is not None:
                 run[mode + "/batch/reconstruction"].log(reconstruction_loss)
         # endregion
+
+
+        # region CALCULATE HIT-RATE
+        print(z_mean.shape)
+        chamfer_matrix = ((z_mean_pred.unsqueeze(1).unsqueeze(1) - z_mean_next.unsqueeze(2).unsqueeze(0)) ** 2).sum(-1).min(dim=-1)[0].sum(dim=-1)
+        extra_matrix = ((extra.unsqueeze(0) - extra_next.unsqueeze(1))**2).sum(-1)
+        hitrate = hitRate_generic(chamfer_matrix + extra_matrix, image.shape[0])
+        mu_hit_rate += hitrate.item()
+        #endregion
+
+
 
         # region CALCULATE KL LOSS
         if (args.autoencoder == "vae") and (
@@ -275,7 +287,9 @@ def train(epoch, data_loader, mode='train'):
                 print(f"Epoch: {epoch} , Batch: {batch_idx} of {len(data_loader)} "
                       f"Loss: {loss:.3f}"
                       f"Loss equiv: {loss_equiv:.3f}\t"
-                      f"Identity: {loss_identity:.3f}\t")
+                      f"Identity: {loss_identity:.3f}\t"
+                      f"Hit-Rate: {hitrate:.3f}\t"
+                      )
             else:
                 print(
                     f"{mode.upper()} Epoch: {epoch}, Batch: {batch_idx} of {len(data_loader)} Loss: {loss:.3f} Loss "
@@ -324,6 +338,7 @@ def train(epoch, data_loader, mode='train'):
         errors.append(mu_loss)
         equiv_errors.append(mu_equiv_loss)
         errors_rec.append(mu_rec_loss)
+        errors_hitrate.append(mu_hit_rate)
         # If the encoding distribution is not None
         if p.components is not None:
             entropy.append(estimate_entropy(p, 1000).item())
@@ -334,6 +349,8 @@ def train(epoch, data_loader, mode='train'):
         np.save(f'{model_path}/equiv_val.npy', equiv_errors)
         np.save(f'{model_path}/entropy_val.npy', entropy)
         np.save(f'{model_path}/errors_rec_val.npy', errors_rec)
+        np.save(f'{model_path}/errors_hitrate.npy', errors_hitrate)
+
 
         if args.autoencoder != "None":
             reconstruction_errors.append(reconstruction_loss.item())
