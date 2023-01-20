@@ -200,9 +200,16 @@ class ReconstructionLoss:
             def reconstruction_loss(input_data, target):
                 loss = torch.nn.functional.binary_cross_entropy_with_logits(input_data, target, reduction="none")
                 # Sum over data dimensions
-                #TODO: Review if averaging is correct
+                loss = torch.sum(loss, dim=tuple(range(1, len(loss.shape))))
+
+                return loss
+        elif loss_type == 'bernoulli_avg':
+            print("Using Bernoulli reconstruction loss")
+
+            def reconstruction_loss(input_data, target):
+                loss = torch.nn.functional.binary_cross_entropy_with_logits(input_data, target, reduction="none")
+                # Sum over data dimensions
                 loss = torch.mean(loss,dim=tuple(range(1, len(loss.shape))) )
-                # loss = torch.sum(loss, dim=tuple(range(1, len(loss.shape))))
 
                 return loss
         else:

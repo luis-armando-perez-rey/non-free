@@ -63,7 +63,7 @@ else:
                         max_data_per_dataset=args.ndatapairs)
 
     dset_val = EquivDataset(f'{args.data_dir}/{args.dataset}/',
-                            list_dataset_names=[dataset_name + "_eval" for dataset_name in args.dataset_name],
+                            list_dataset_names=[dataset_name + "_val" for dataset_name in args.dataset_name],
                             max_data_per_dataset=-1)
     if args.dataset != "symmetric_solids":
         dset_eval = EvalDataset(f'{args.data_dir}/{args.dataset}/', list_dataset_names=args.dataset_name)
@@ -128,8 +128,9 @@ errors_hitrate = []
 
 # region LOSS FUNCTIONS
 identity_loss_function = IdentityLoss(args.identity_loss, temperature=args.tau)
-equiv_loss_train_function = EquivarianceLoss(args.equiv_loss)
+equiv_loss_train_function = EquivarianceLoss(args.equiv_loss, chamfer_reg=args.chamfer_reg)
 equiv_loss_val_function = EquivarianceLoss("chamfer_val")
+
 
 # endregion
 
@@ -140,6 +141,7 @@ def train(epoch, data_loader, mode='train'):
     mu_equiv_loss = 0
     mu_id_loss = 0
     mu_hit_rate = 0
+    mu_entropy = 0
     global_step = len(data_loader) * epoch
 
     # Chamfer distance is used for validation
@@ -176,7 +178,7 @@ def train(epoch, data_loader, mode='train'):
         z_mean_next, z_logvar_next, extra_next = model(img_next)
         # TODO: Allow for different scale values
         # WARNING!! Notice that the scale parameter is being fixed!!!
-        if not(args.variablescale):
+        if not (args.variablescale):
             z_logvar = -4.6 * torch.ones(z_logvar.shape).to(z_logvar.device)
             z_logvar_next = -4.6 * torch.ones(z_logvar.shape).to(z_logvar.device)
 
@@ -185,7 +187,9 @@ def train(epoch, data_loader, mode='train'):
             action = torch.flatten(action)
             rot = make_rotation_matrix(action)
             # The predicted z_mean after applying the rotation corresponding to the action
-            z_mean_pred = (rot @ z_mean.unsqueeze(-1).detach()).squeeze(-1)  # Beware the detach!!!
+            # TODO: Removed detachment
+            # z_mean_pred = (rot @ z_mean.unsqueeze(-1).detach()).squeeze(-1)  # Beware the detach!!!
+            z_mean_pred = (rot @ z_mean.unsqueeze(-1)).squeeze(-1)  # Beware the detach!!!
         elif args.latent_dim == 3:
             # print(z_mean.shape)
             # z_mean_pred = action @ z_mean.detach()
@@ -193,7 +197,8 @@ def train(epoch, data_loader, mode='train'):
             z_mean_pred = action @ z_mean
         elif args.latent_dim > 3 and args.latent_dim % 2 == 0:
             action = action.squeeze(1)
-            z_mean_pred = so2_rotate_subspaces(z_mean, action, detach=True)
+            # TODO: Removed detachment
+            z_mean_pred = so2_rotate_subspaces(z_mean, action, detach=False)
         else:
             raise ValueError(f"Rotation not defined for latent dimension {args.latent_dim} ")
 
@@ -233,10 +238,12 @@ def train(epoch, data_loader, mode='train'):
                 # Calculate reconstruction loss for each of the latent representations
                 for n in range(args.num):
                     x_rec = dec(z[:, n].detach())
-                    x_next_rec = dec(z_next[:, n].detach())
                     reconstruction_loss += rec_loss_function(x_rec, image).mean()
-                    reconstruction_loss += rec_loss_function(x_next_rec, img_next).mean()
+                    # TODO: Removed reconstruction of next to have larger batch size
+                    # x_next_rec = dec(z_next[:, n].detach())
+                    # reconstruction_loss += rec_loss_function(x_next_rec, img_next).mean()
             else:
+                # TODO: Review if re-attaching helps
                 x_rec = dec(torch.cat([z_mean.view((z_mean.shape[0], -1)), extra], dim=-1).detach())
                 reconstruction_loss += rec_loss_function(x_rec, image).mean()
             # TODO: Review if this helps
@@ -248,16 +255,22 @@ def train(epoch, data_loader, mode='train'):
                 run[mode + "/batch/reconstruction"].log(reconstruction_loss)
         # endregion
 
-
         # region CALCULATE HIT-RATE
-        print(z_mean.shape)
-        chamfer_matrix = ((z_mean_pred.unsqueeze(1).unsqueeze(1) - z_mean_next.unsqueeze(2).unsqueeze(0)) ** 2).sum(-1).min(dim=-1)[0].sum(dim=-1)
-        extra_matrix = ((extra.unsqueeze(0) - extra_next.unsqueeze(1))**2).sum(-1)
+        if args.latent_dim == 3:
+            chamfer_matrix = \
+                ((z_mean_pred.unsqueeze(1).unsqueeze(1) - z_mean_next.unsqueeze(2).unsqueeze(0)) ** 2).sum(-1).sum(
+                    -1).min(
+                    dim=-1)[
+                    0].sum(dim=-1)
+        else:
+            chamfer_matrix = \
+                ((z_mean_pred.unsqueeze(1).unsqueeze(1) - z_mean_next.unsqueeze(2).unsqueeze(0)) ** 2).sum(-1).min(
+                    dim=-1)[
+                    0].sum(dim=-1)
+        extra_matrix = ((extra.unsqueeze(0) - extra_next.unsqueeze(1)) ** 2).sum(-1)
         hitrate = hitRate_generic(chamfer_matrix + extra_matrix, image.shape[0])
         mu_hit_rate += hitrate.item()
-        #endregion
-
-
+        # endregion
 
         # region CALCULATE KL LOSS
         if (args.autoencoder == "vae") and (
@@ -269,6 +282,14 @@ def train(epoch, data_loader, mode='train'):
         else:
             kl_loss = None
         # endregion
+
+        #region CALCULATE ENTROPY
+        if args.latent_dim == 3:
+            mu_entropy += matrix_dist(z_mean, z_mean).mean()
+        else:
+            mu_entropy += estimate_entropy(p, 1000).item()
+
+        #endregion
 
         # Sum all losses
         if mode == "train":
@@ -301,7 +322,9 @@ def train(epoch, data_loader, mode='train'):
                       f"Loss: {loss:.3f}"
                       f"Loss equiv: {loss_equiv:.3f}\t"
                       f"Identity: {loss_identity:.3f}\t"
-                      f"Reconstruction: {reconstruction_loss:.3f}\t")
+                      f"Reconstruction: {reconstruction_loss:.3f}\t"
+                      f"Hit-Rate: {hitrate:.3f}\t"
+                      )
             else:
                 print(
                     f"Epoch: {epoch}, Batch: {batch_idx} of {len(data_loader)} Loss: {loss:.3f} Loss "
@@ -313,7 +336,9 @@ def train(epoch, data_loader, mode='train'):
                     f"Epoch: {epoch}, Batch: {batch_idx} of {len(data_loader)} Loss: {loss:.3f} Loss "
                     f"equiv: "
                     f" {loss_equiv:.3f} Loss reconstruction: {reconstruction_loss:.3f} Loss KL: {kl_loss:.3f} "
-                    f"Loss identity: {loss_identity:.3f}")
+                    f"Loss identity: {loss_identity:.3f}"
+                    f"Hit-Rate: {hitrate:.3f}\t"
+                )
             else:
                 print(
                     f" Epoch: {epoch}, Batch: {batch_idx} of {len(data_loader)} Loss: {loss:.3f} Loss "
@@ -332,7 +357,11 @@ def train(epoch, data_loader, mode='train'):
     mu_loss /= total_batches
     mu_rec_loss /= total_batches
     mu_equiv_loss /= total_batches
+    mu_equiv_loss /= args.num
+    mu_equiv_loss /= args.weightequivariance
     mu_id_loss /= total_batches
+    mu_hit_rate /= total_batches
+    mu_entropy /= total_batches
 
     if mode == 'val':
         errors.append(mu_loss)
@@ -341,7 +370,7 @@ def train(epoch, data_loader, mode='train'):
         errors_hitrate.append(mu_hit_rate)
         # If the encoding distribution is not None
         if p.components is not None:
-            entropy.append(estimate_entropy(p, 1000).item())
+            entropy.append(mu_entropy)
         if extra_dim > 0:
             invariant_loss.append(loss_identity.item())
             np.save(f'{model_path}/invariant_val.npy', invariant_loss)
@@ -350,7 +379,6 @@ def train(epoch, data_loader, mode='train'):
         np.save(f'{model_path}/entropy_val.npy', entropy)
         np.save(f'{model_path}/errors_rec_val.npy', errors_rec)
         np.save(f'{model_path}/errors_hitrate.npy', errors_hitrate)
-
 
         if args.autoencoder != "None":
             reconstruction_errors.append(reconstruction_loss.item())
@@ -362,7 +390,7 @@ def train(epoch, data_loader, mode='train'):
                 save(dec, decoder_file)
         if (args.plot > 0) & ((epoch % (args.plot + 1)) == 0):
             mean_eval, logvar_eval, extra_eval = model(eval_images.to(device))
-            if not(args.variablescale):
+            if not (args.variablescale):
                 logvar_eval = -4.6 * torch.ones(logvar_eval.shape).to(logvar_eval.device)
             std_eval = np.exp(logvar_eval.detach().cpu().numpy() / 2.) / 10
             plot_save_folder = os.path.join(os.path.join(model_path, "figures"))
@@ -371,10 +399,10 @@ def train(epoch, data_loader, mode='train'):
     # Write to standard output. Allows printing to file progress when using HPC
     sys.stdout.flush()
 
-
-
     if run is not None:
         run[mode + "/epoch/loss"].log(mu_loss)
+        run[mode + "/epoch/hitrate"].log(mu_hit_rate)
+        run[mode + "/epoch/entropy"].log(mu_entropy)
         if args.autoencoder != "None":
             run[mode + "/epoch/reconstruction"].log(mu_rec_loss)
         run[mode + "/epoch/equivariance"].log(mu_equiv_loss)
