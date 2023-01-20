@@ -41,7 +41,10 @@ else:
     run = None
 
 # region LOAD DATASET
-dset, eval_dset = get_dataset(args.data_dir, args.dataset, args.dataset_name, so3_matrices=True)
+if args.dataset != "symmetric_solids" and args.dataset != "modelnetso3":
+    dset, eval_dset = get_dataset(args.data_dir, args.dataset, args.dataset_name, so3_matrices=True)
+else:
+    dset, eval_dset = get_dataset(args.data_dir, args.dataset, args.dataset_name, so3_matrices=False)
 train_loader = torch.utils.data.DataLoader(dset, batch_size=100, shuffle=True)
 # endregion
 
@@ -165,7 +168,7 @@ for i in range(5):
     plt.savefig(os.path.join(save_folder, f"test_image_{i}.png"), bbox_inches='tight')
 
 eval_indices = np.arange(0, len(eval_dset.data[0]), len(eval_dset.data[0]) // 36)
-if args.dataset != "symmetric_solids":
+if args.dataset != "symmetric_solids" and args.dataset != "modelnetso3":
     eval_mean = model.encode(torch.tensor(eval_dset.data[0][eval_indices], dtype=img.dtype).to(device))
 else:
     eval_mean = model.encode(torch.tensor(eval_dset.flat_images[eval_indices], dtype=img.dtype).to(device))

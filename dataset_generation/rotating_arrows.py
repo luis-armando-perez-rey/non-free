@@ -109,7 +109,7 @@ class ArrowCanvas:
 def generate_training_data(num_arrows_list, dataset_folder, dataset_name, style_list: Optional[List[str]] = None,
                            color_list: Optional[List[str]] = None, radius_list: Optional[List[float]] = None,
                            examples_per_num_arrows: int = 100,
-                           resolution=(64, 64), multicolor=False, type_pairs="random"):
+                           resolution=(64, 64), multicolor=False, type_pairs="random", num_discrete_angles: int = 100):
     equiv_data = []
     equiv_lbls = []
     equiv_stabilizers = []
@@ -129,7 +129,7 @@ def generate_training_data(num_arrows_list, dataset_folder, dataset_name, style_
                     random_index_angles = np.arange(examples_per_num_arrows)
                     np.random.shuffle(random_index_angles)
                     # Possible angles for type of pairs consecutive and restricted random
-                    possible_angles = np.linspace(0, 2 * np.pi, examples_per_num_arrows, endpoint=False)
+                    possible_angles = np.linspace(0, 2 * np.pi, num_discrete_angles, endpoint=False)
                     for num_example in range(examples_per_num_arrows):
                         print(
                             "Generating image with num arrows {}, style {}, color {}, radius {}, multicolor {}, "
@@ -148,6 +148,11 @@ def generate_training_data(num_arrows_list, dataset_folder, dataset_name, style_
                         elif type_pairs == "random":
                             angle1 = 2 * np.pi * np.random.random()
                             angle2 = 2 * np.pi * np.random.random()
+                            print(angle1, angle2)
+                        elif type_pairs == "discrete_arrows":
+                            angle1 = np.random.choice(possible_angles)
+                            angle2 = np.random.choice(possible_angles)
+                            print(angle1, angle2)
                         else:
                             raise ValueError(
                                 "Invalid type of pairs, valid options are consecutive, consecutive_random, random")
