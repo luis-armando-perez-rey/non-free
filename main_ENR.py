@@ -93,7 +93,7 @@ rec_loss_function = ReconstructionLoss(args.reconstruction_loss)
 optimizer = get_optimizer(args.optimizer, args.lr, model.parameters())
 
 errors = []
-
+hitrates = []
 
 def equivariance_loss(z_transformed, z_next):
     loss = ((z_transformed - z_next) ** 2).mean()
@@ -102,6 +102,7 @@ def equivariance_loss(z_transformed, z_next):
 
 def train(epoch, data_loader, mode='train'):
     mu_loss = 0
+    mu_hitrate = 0
     equiv_loss = 0
     global_step = len(data_loader) * epoch
 
@@ -120,9 +121,9 @@ def train(epoch, data_loader, mode='train'):
             model.eval()
 
         image = image.to(device)
-
         img_next = img_next.to(device)
         action = action.to(device).squeeze(1)
+        batch_size = image.shape[0]
 
         x_rec, _ = model(image, action)
         encoded_image = model.encode(image)
@@ -138,13 +139,23 @@ def train(epoch, data_loader, mode='train'):
 
         loss = rec_loss_function(x_rec, img_next).mean()
 
+
+
+        # region CALCULATE HIT-RATE
+        encoded_image_transformed_flat = encoded_image_transformed.view((batch_size,-1))
+        encoded_image_next_flat = encoded_image_next.view((batch_size,-1))
+        dist_matrix = ((encoded_image_transformed_flat.unsqueeze(0) - encoded_image_next_flat.unsqueeze(1))**2).sum(-1)
+        hitrate = hitRate_generic(dist_matrix, batch_size)
+        mu_hitrate += hitrate.item()
+        #endregion
+
         if run is not None:
             run[mode + "/batch/loss"].log(loss)
             run[mode + "/batch/equivariance_loss"].log(equiv_loss_batch)
 
         print(
             f"{mode.upper()} Epoch: {epoch}, Batch: {batch_idx} of {len(data_loader)} Loss: {loss:.3f} "
-            f"Equivariance Loss: {equiv_loss_batch:.3f}")
+            f"Equivariance Loss: {equiv_loss_batch:.3f}, hitrate: {hitrate:.3f}")
 
         mu_loss += loss.item()
 
@@ -154,10 +165,13 @@ def train(epoch, data_loader, mode='train'):
 
     mu_loss /= total_batches
     equiv_loss /= total_batches
+    mu_hitrate /= total_batches
 
     if mode == 'val':
         errors.append(mu_loss)
+        hitrates.appen(mu_hitrate)
         np.save(f'{model_path}/errors_val.npy', errors)
+        np.save(f'{model_path}/errors_hitrate.npy', hitrates)
         if run is not None:
             run[mode + "/epoch/val_loss"].log(mu_loss)
             run[mode + "/epoch/equiv_loss"].log(equiv_loss)
