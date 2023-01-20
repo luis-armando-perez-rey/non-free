@@ -8,7 +8,8 @@ from scipy.spatial.transform import Rotation as R
 from utils.dataset_utils import get_dataset
 from utils.nn_utils import get_rotated_mean
 from utils.plotting_utils import plot_extra_dims, plot_images_distributions, \
-    plot_mixture_neurreps, add_image_to_ax, add_distribution_to_ax_torus, save_embeddings_on_circle
+    plot_mixture_neurreps, add_image_to_ax, add_distribution_to_ax_torus, save_embeddings_on_circle, yiq_embedding, \
+    plot_embeddings_eval_torus
 from utils.plotting_utils_so3 import visualize_so3_probabilities
 from utils.torch_utils import torch_data_to_numpy
 
@@ -18,20 +19,17 @@ parser.add_argument('--dataset', type=str, default='dataset', help='Dataset')
 parser.add_argument('--dataset_name', nargs="+", type=str, default=['4'], help='Dataset name')
 args_eval = parser.parse_args()
 
-
-
 model_dir = os.path.join(".", "saved_models", args_eval.save_folder)
 model_file = os.path.join(model_dir, 'model.pt')
 decoder_file = os.path.join(model_dir, 'decoder.pt')
 meta_file = os.path.join(model_dir, 'metadata.pkl')
 args = pickle.load(open(meta_file, 'rb'))['args']
-device = torch.device("cuda:"+args.gpu if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:" + args.gpu if torch.cuda.is_available() else "cpu")
 # torch.manual_seed(42)
 torch.cuda.empty_cache()
 print(args)
 save_folder = os.path.join(".", "visualizations", args.model_name)
 os.makedirs(save_folder, exist_ok=True)
-
 
 if args.neptune_user != "":
     from utils.neptune_utils import reload_neptune_run
@@ -41,13 +39,13 @@ if args.neptune_user != "":
 else:
     run = None
 
-
 # region LOAD DATASET
 dset, eval_dset = get_dataset(args.data_dir, args.dataset, args.dataset_name)
 train_loader = torch.utils.data.DataLoader(dset, batch_size=100, shuffle=True)
 # endregion
 
 # region GET MODEL
+print("Loading model from: ", model_file)
 device = 'cpu'
 model = torch.load(model_file).to(device)
 if args.autoencoder != 'None':
@@ -58,30 +56,36 @@ model.eval()
 # endregion
 
 # region GET IMAGES
+print("Getting images")
 img, img_next, action, n_stabilizers = next(iter(train_loader))
 mean_eval, logvar_eval, extra_eval = model(torch.FloatTensor(eval_dset.flat_images).to(device))
 img_shape = np.array(img.shape[1:])
 
 # Get the numpy array versions of the images
+print("Getting numpy arrays")
 npimages = torch_data_to_numpy(img)
 npimages_next = torch_data_to_numpy(img_next)
 npimages_eval = eval_dset.flat_images_numpy
 # endregion
 
 # region POSTERIOR PARAMETERS
+print("Computing posterior parameters")
 # Calculate the parameters obtained by the models
 mean, logvar, extra = model(img.to(device))
 extra = extra.detach().cpu().numpy()
 mean_next, logvar_next, extra_next = model(img_next.to(device))
 extra_next = extra_next.detach().cpu().numpy()
-if not(args.variablescale):
+if not (args.variablescale):
     logvar = -4.6 * torch.ones(logvar.shape).to(logvar.device)
     logvar_eval = -4.6 * torch.ones(logvar_eval.shape).to(logvar_eval.device)
 std_eval = np.exp(logvar_eval.detach().cpu().numpy() / 2.) / 10
 
 # Plot the distribution of standard deviation values
 if run is not None:
-    plt.hist(std_eval.flatten())
+    fig, ax = plt.subplots(1, 1)
+    ax.hist(std_eval.flatten())
+    ax.set_xlabel("Standard deviation")
+    ax.set_ylabel("Frequency")
     run["eval_std_hist"].upload(plt.gcf())
 
 # Obtain the values as numpy arrays
@@ -91,7 +95,6 @@ std = np.exp(logvar.detach().cpu().numpy() / 2.) / 10
 print("Distribution of the standard deviations", np.unique(std * 10))
 std_next = np.exp(logvar_next.detach().cpu().numpy() / 2.) / 10
 # endregion
-
 
 
 # Plotting for SO(2) and its combinations
@@ -120,13 +123,15 @@ if args.latent_dim == 2 or args.latent_dim == 4:
         if run is not None:
             run[f"image_pair_{i}"].upload(plt.gcf())
         plot_mixture_neurreps(mean_numpy[i])
-        if run is not None:
-            run[f"test_mixture_{i}"].upload(plt.gcf())
-        plt.savefig(os.path.join(save_folder, f"test_mixture_{i}.png"), bbox_inches='tight')
-        add_image_to_ax(npimages[i])
-        if run is not None:
-            run[f"image_{i}"].upload(plt.gcf())
-        plt.savefig(os.path.join(save_folder, f"test_image_{i}.png"), bbox_inches='tight')
+
+        # For submission
+        # add_image_to_ax(npimages[i])
+        # if run is not None:
+        #     run[f"image_{i}"].upload(plt.gcf())
+        # plt.savefig(os.path.join(save_folder, f"test_image_{i}.png"), bbox_inches='tight')
+        # if run is not None:
+        #     run[f"test_mixture_{i}"].upload(plt.gcf())
+        # plt.savefig(os.path.join(save_folder, f"test_mixture_{i}.png"), bbox_inches='tight')
         if args.latent_dim == 4:
             fig, ax = plt.subplots(1, 1, figsize=(5, 5))
             ax = add_distribution_to_ax_torus(mean_numpy[i], std[i], ax, n=args.num, color="r", scatter=True)
@@ -145,28 +150,35 @@ if args.latent_dim == 2 or args.latent_dim == 4:
     # # Save the plots of the embeddings on the circle
     # save_embeddings_on_circle(mean_eval, std_eval, flat_stabilizers, save_folder, args.dataset_name[0],
     #                           increasing_radius=False)
-
-    save_embeddings_on_circle(mean_eval.detach().cpu().numpy(), std_eval, eval_dset.flat_stabs, save_folder,
-                              args.dataset_name[0],
-                              increasing_radius=True)
-    if run is not None:
-        run["embeddings_on_circle"].upload(plt.gcf())
+    if args.latent_dim != 4:
+        save_embeddings_on_circle(mean_eval.detach().cpu().numpy(), std_eval, eval_dset.flat_stabs, save_folder,
+                                  args.dataset_name[0],
+                                  increasing_radius=True)
+        if run is not None:
+            run["embeddings_on_circle"].upload(plt.gcf())
     #
-    # # region PLOT ON THE TORUS
-    # if args.latent_dim == 4:
-    #     print("EVAL ACTIONS SHAPE", flat_eval_actions.shape)
-    #     colors = yiq_embedding(flat_eval_actions[:, 0], flat_eval_actions[:, 1])
-    #     fig, ax = plot_embeddings_eval_torus(mean_eval.detach().numpy(), colors)
-    #     fig.savefig(os.path.join(save_folder, f"torus_eval_embedings.png"), bbox_inches='tight')
-    #     plt.close("all")
+    # region PLOT ON THE TORUS
+    if args.latent_dim == 4:
+        print("EVAL ACTIONS SHAPE", eval_dset.flat_lbls.shape)
+        colors = yiq_embedding(eval_dset.flat_lbls[:, 0], eval_dset.flat_lbls[:, 1])
+        fig, ax = plot_embeddings_eval_torus(mean_eval.detach().numpy(), colors)
+        fig.savefig(os.path.join(save_folder, f"torus_eval_embedings.png"), bbox_inches='tight')
+        plt.close("all")
     # endregion
 
     # TODO: Improve reconstruction code
     unique_images = []
-    for unique in np.unique(dset.stabs):
-        unique_images.append(dset.data[dset.stabs == unique][0][0])
+    for unique in np.unique(dset.stabs, axis=0):
+        if args.latent_dim == 4:
+            # If latent dim is 4 the stabilizer is a 2D vector
+            unique_images.append(dset.data[np.product(dset.stabs == unique, axis=-1)][0][0])
+        else:
+            unique_images.append(dset.data[dset.stabs == unique][0][0])
 
     unique_images = torch.tensor(np.array(unique_images), dtype=img.dtype).to(device)
+    if len(unique_images.shape) == 3:
+        unique_images = unique_images.unsqueeze(0)
+    print("Unique images shape", unique_images.shape)
     unique_mean, unique_logvar, unique_extra = model(unique_images)
     # region PLOT RECONSTRUCTIONS
     if args.autoencoder != "None":
@@ -191,7 +203,6 @@ if args.latent_dim == 2 or args.latent_dim == 4:
                 plt.savefig(os.path.join(save_folder, f"reconstruction_{i}.png"), bbox_inches='tight')
                 add_image_to_ax(unique_images[i].permute((1, 2, 0)).detach().cpu().numpy())
                 plt.savefig(os.path.join(save_folder, f"input_image_{i}.png"), bbox_inches='tight')
-
 
             # boolean_selection = (flat_stabilizers == unique)
             # fig, _ = plot_images_multi_reconstructions(npimages_eval[boolean_selection][:5],
@@ -302,6 +313,8 @@ elif args.latent_dim == 3:
                                         rotations_gt=mean_rot[i],
                                         show_color_wheel=True)
         fig.savefig(os.path.join(save_folder, f"{i}.png"), bbox_inches='tight')
+        if run is not None:
+            run["probabilities_"+str(i)].upload(plt.gcf())
         plt.close("all")
 
         fig = plt.figure(figsize=(10, 10))
@@ -318,6 +331,8 @@ elif args.latent_dim == 3:
         rots = R.from_matrix(mean_rot[i]).as_rotvec()  # .as_euler('zxy', degrees=False)
         ax.scatter3D(rots[:, 0], rots[:, 1], rots[:, 2], s=[30] * len(rots), marker="*")
         fig.savefig(os.path.join(save_folder, f"rotvec_{i}.png"), bbox_inches='tight')
+        if run is not None:
+            run["rotvec"+str(i)].upload(plt.gcf())
         plt.close("all")
 
         fig = plt.figure(figsize=(5, 5))
@@ -340,6 +355,8 @@ elif args.latent_dim == 3:
         ax.set_xticks([])
         ax.set_yticks([])
         ax.set_zticks([])
+        if run is not None:
+            run["rotvec_alone"+str(i)].upload(plt.gcf())
         fig.savefig(os.path.join(save_folder, f"rotvec_alone_{i}.png"), bbox_inches='tight')
 
     unique_images = []
@@ -356,6 +373,8 @@ elif args.latent_dim == 3:
             add_image_to_ax(1 / (1 + np.exp(-x_rec[i])))
             plt.savefig(os.path.join(save_folder, f"reconstruction_{i}.png"), bbox_inches='tight')
             add_image_to_ax(unique_images[i].permute((1, 2, 0)).detach().cpu().numpy())
+            if run is not None:
+                run["input_image" + str(i)].upload(plt.gcf())
             plt.savefig(os.path.join(save_folder, f"input_image_{i}.png"), bbox_inches='tight')
 if run is not None:
     run.stop()

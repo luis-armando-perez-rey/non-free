@@ -12,6 +12,7 @@ from functools import reduce
 from ENR.models.submodels import ResNet2d, ResNet3d, Projection, InverseProjection
 from ENR.models.rotation_layers import SphericalMask, Rotate3d
 
+
 class View(nn.Module):
     def __init__(self, size):
         super(View, self).__init__()
@@ -20,6 +21,7 @@ class View(nn.Module):
     def forward(self, tensor):
         return tensor.view(self.size)
 
+
 class Print_shape(nn.Module):
     def __init__(self):
         super(Print_shape, self).__init__()
@@ -27,7 +29,6 @@ class Print_shape(nn.Module):
     def forward(self, tensor):
         print(tensor.shape)
         return tensor
-
 
 
 class AE(nn.Module):
@@ -46,22 +47,21 @@ class AE(nn.Module):
     def forward(self, x, action):
         z = self.encode(x)
 
-        #The matrix is processed by inverting, flipping rows and columns and adding a
-        #column of zeros as the translational part
+        # The matrix is processed by inverting, flipping rows and columns and adding a
+        # column of zeros as the translational part
         matrix = torch.flip(action.transpose(-2, -1), dims=(-2, -1))
         translations = torch.zeros(matrix.shape[0], 3, 1, device=matrix.device)
         affine_matrix = torch.cat([matrix, translations], dim=2)
 
-        #Because of some PyTorch mystery, align_corners should be False
+        # Because of some PyTorch mystery, align_corners should be False
         grid = F.affine_grid(affine_matrix, z.shape, align_corners=False)
         z_rotated = F.grid_sample(z, grid, align_corners=False)
 
         return self.decode(z_rotated)
 
 
-class CNN(AE):                           #64x64
+class CNN(AE):  # 64x64
     def __init__(self, nc):
-
         encoder = nn.Sequential(
             nn.Conv2d(nc, 64, 4, 2, 1),
             nn.ReLU(True),
@@ -85,15 +85,14 @@ class CNN(AE):                           #64x64
             nn.ConvTranspose2d(64, 64, 4, 1, 1),
             nn.ReLU(True),
             nn.ConvTranspose2d(64, nc, 4, 1, 1),
-            #Print_shape(),
+            # Print_shape(),
             nn.Sigmoid()
-            )
+        )
         super(CNN, self).__init__(encoder, decoder)
 
 
-class CNN_naive(AE):                           #Works on 64x64 images
+class CNN_naive(AE):  # Works on 64x64 images
     def __init__(self, nc, grid_size=20):
-
         encoder = nn.Sequential(
             nn.Conv2d(nc, 64, 4, 2, 1),
             nn.ReLU(True),
@@ -106,12 +105,12 @@ class CNN_naive(AE):                           #Works on 64x64 images
             nn.Conv2d(128, 256, 4, 1),
             nn.ReLU(True),
             View([-1, 256]),
-            nn.Linear(256, grid_size**4),
+            nn.Linear(256, grid_size ** 4),
             View([-1, grid_size, grid_size, grid_size, grid_size])
         )
         decoder = nn.Sequential(
-            View([-1, grid_size**4]),
-            nn.Linear(grid_size**4, 256),
+            View([-1, grid_size ** 4]),
+            nn.Linear(grid_size ** 4, 256),
             View((-1, 256, 1, 1)),
             nn.ReLU(True),
             nn.ConvTranspose2d(256, 128, 4),
@@ -124,9 +123,8 @@ class CNN_naive(AE):                           #Works on 64x64 images
             nn.ReLU(True),
             nn.ConvTranspose2d(64, nc, 4, 2, 1),
             nn.Sigmoid()
-            )
+        )
         super(CNN_naive, self).__init__(encoder, decoder)
-
 
 
 class NeuralRenderer(nn.Module):
@@ -150,14 +148,13 @@ class NeuralRenderer(nn.Module):
         input_shape = self.inv_transform_2d.output_shape
         self.inv_projection = InverseProjection(input_shape, num_channels_inv_projection)
 
-
         self.inv_transform_3d = ResNet3d(self.inv_projection.output_shape,
                                          channels_3d, strides_3d)
         self.rotation_layer = Rotate3d(self.mode)
 
-
         forward_channels_3d = list(reversed(channels_3d))[1:] + [channels_3d[0]]
-        forward_strides_3d = [-stride if abs(stride) == 2 else 1 for stride in list(reversed(strides_3d[1:]))] + [strides_3d[0]]
+        forward_strides_3d = [-stride if abs(stride) == 2 else 1 for stride in list(reversed(strides_3d[1:]))] + [
+            strides_3d[0]]
         self.transform_3d = ResNet3d(self.inv_transform_3d.output_shape,
                                      forward_channels_3d, forward_strides_3d)
 
@@ -165,7 +162,8 @@ class NeuralRenderer(nn.Module):
                                      num_channels_projection)
 
         forward_channels_2d = list(reversed(channels_2d))[1:] + [channels_2d[0]]
-        forward_strides_2d = [-stride if abs(stride) == 2 else 1 for stride in list(reversed(strides_2d[1:]))] + [strides_2d[0]]
+        forward_strides_2d = [-stride if abs(stride) == 2 else 1 for stride in list(reversed(strides_2d[1:]))] + [
+            strides_2d[0]]
         final_conv_channels_2d = img_shape[0]
         self.transform_2d = ResNet2d(self.projection.output_shape,
                                      forward_channels_2d, forward_strides_2d,
@@ -174,15 +172,12 @@ class NeuralRenderer(nn.Module):
         self.scene_shape = self.inv_transform_3d.output_shape
         self.spherical_mask = SphericalMask(self.scene_shape)
 
-
     def decode(self, scene):
-
         features_3d = self.transform_3d(scene)
         features_2d = self.projection(features_3d)
         return torch.sigmoid(self.transform_2d(features_2d))
 
     def encode(self, img):
-
         features_2d = self.inv_transform_2d(img)
         features_3d = self.inv_projection(features_2d)
         scene = self.inv_transform_3d(features_3d)
@@ -195,13 +190,13 @@ class NeuralRenderer(nn.Module):
         return self.spherical_mask(scene), None
 
     def act(self, z, action, *args):
-        #The matrix is processed by inverting, flipping rows and columns and adding a
-        #column of zeros as the translational part
+        # The matrix is processed by inverting, flipping rows and columns and adding a
+        # column of zeros as the translational part
         matrix = torch.flip(action.transpose(-2, -1), dims=(-2, -1))
         translations = torch.zeros(matrix.shape[0], 3, 1, device=matrix.device)
         affine_matrix = torch.cat([matrix, translations], dim=2)
 
-        #Because of some PyTorch mystery, align_corners should be False
+        # Because of some PyTorch mystery, align_corners should be False
         grid = F.affine_grid(affine_matrix, z.shape, align_corners=False)
         z_rotated = F.grid_sample(z, grid, align_corners=False)
         return z_rotated
@@ -211,11 +206,11 @@ class NeuralRenderer(nn.Module):
     #         z = self.act(z, action[:, i, ...])
     #     return z
 
-
     def forward(self, x, action):
         z = self.encode(x)
         z_rotated = self.act(z, action)
         return self.decode(z_rotated), self.decode(z)
+
 
 if __name__ == "__main__":
     pass
