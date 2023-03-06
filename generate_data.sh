@@ -17,11 +17,11 @@
 #python3 generate_data.py --n_examples 5000 --dataset_name 6 --n_arrows 6 --dataset arrows
 
 python generate_data.py --n_examples 4500 --dataset_name 3 --n_arrows 3 --dataset arrows
-#python generate_data.py --n_examples 4500 --dataset_name 5 --n_arrows 5 --dataset arrows
-#python generate_data.py --n_examples 4500 --dataset_name 6 --n_arrows 6 --dataset arrows
-#python generate_data.py --n_examples 500 --dataset_name 4_val --n_arrows 4 --dataset arrows
-#python generate_data.py --n_examples 500 --dataset_name 5_val --n_arrows 5 --dataset arrows
-#python generate_data.py --n_examples 500 --dataset_name 6_val --n_arrows 6 --dataset arrows
+python generate_data.py --n_examples 4500 --dataset_name 5 --n_arrows 5 --dataset arrows
+python generate_data.py --n_examples 4500 --dataset_name 6 --n_arrows 6 --dataset arrows
+# python generate_data.py --n_examples 500 --dataset_name 4_val --n_arrows 4 --dataset arrows
+# python generate_data.py --n_examples 500 --dataset_name 5_val --n_arrows 5 --dataset arrows
+# python generate_data.py --n_examples 500 --dataset_name 6_val --n_arrows 6 --dataset arrows
 
 #python3 generate_data.py --n_examples 5000 --dataset_name 2_3 --n_arrows 2 3 --dataset double_arrows
 #python3 generate_data.py --n_examples 1 --dataset_name test --dataset rotating_mnist

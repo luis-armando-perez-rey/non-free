@@ -301,5 +301,3 @@ if run is not None:
 # fig, axes = plot_latent_dimension_combinations(embeddings_flat, colors_flat)
 # neptune.log_image("plots", fig, image_name="embeddings")
 # np.save(save_path, latent_embeddings)
-
-

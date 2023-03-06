@@ -5,7 +5,7 @@ from dataset_generation.simple_sinusoidal import generate_dataset_sinusoidals, g
 from dataset_generation import image_translation, dsprites_loader, symmetric_solids, rotating_arrows, rotating_mnist, \
     modelnet, modelnet_so3
 
-from quessard.data.discrete_data_generation import generate_arrow_array
+# from quessard.data.discrete_data_generation import generate_arrow_array
 
 parser = argparse.ArgumentParser()
 # Dataset
@@ -63,14 +63,14 @@ def generate_dataset(dataset):
                                                type_pairs="discrete_arrows")
         rotating_arrows.generate_eval_data(**generation_parameters)
 
-    elif dataset == "discrete_quessard_arrows":
-        generation_parameters = dict(num_arrows_list=args.n_arrows, color_list=args.colors, style_list=args.styles,
-                                     dataset_folder="./data/discrete_quessard_arrows",
-                                     dataset_name=args.dataset_name,
-                                     radius_list=None,
-                                     num_discrete_angles=args.n_examples
-                                     )
-        generate_arrow_array(**generation_parameters)
+    # elif dataset == "discrete_quessard_arrows":
+    #     generation_parameters = dict(num_arrows_list=args.n_arrows, color_list=args.colors, style_list=args.styles,
+    #                                  dataset_folder="./data/discrete_quessard_arrows",
+    #                                  dataset_name=args.dataset_name,
+    #                                  radius_list=None,
+    #                                  num_discrete_angles=args.n_examples
+    #                                  )
+    #     generate_arrow_array(**generation_parameters)
 
 
 
