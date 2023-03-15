@@ -2,6 +2,7 @@ import argparse
 import pickle
 import numpy as np
 import os
+import sys
 import torch
 import matplotlib.pyplot as plt
 from scipy.spatial.transform import Rotation as R
@@ -12,13 +13,26 @@ from utils.plotting_utils import plot_extra_dims, plot_images_distributions, \
 from utils.plotting_utils_so3 import visualize_so3_probabilities
 from utils.torch_utils import torch_data_to_numpy
 from sklearn.decomposition import PCA
-from ENR.config import ENR_CONFIG
+from datasets.equiv_dset import EquivDataset
+from utils.nn_utils import hitRate_generic
 
+CWD = os.getcwd()
+PROJECT_PATH = os.path.dirname(CWD)
+LSBD_PATH = os.path.join(PROJECT_PATH, "lsbd-vae")
+
+sys.path.append(LSBD_PATH)
+
+print("Appended ", PROJECT_PATH)
+print("Appended ", LSBD_PATH)
+from lsbd_vae.metrics.dlsbd_metric import dlsbd, create_combinations_omega_values_range
+
+# region PARSE ARGUMENTS
 parser = argparse.ArgumentParser()
 parser.add_argument('--save-folder', type=str, default='checkpoints', help='Path to saved model')
 parser.add_argument('--dataset', type=str, default='dataset', help='Dataset')
 parser.add_argument('--dataset_name', nargs="+", type=str, default=['4'], help='Dataset name')
 args_eval = parser.parse_args()
+# endregion
 
 model_dir = os.path.join(".", "saved_models", args_eval.save_folder)
 model_file = os.path.join(model_dir, 'model.pt')
@@ -31,52 +45,6 @@ torch.cuda.empty_cache()
 print(args)
 save_folder = os.path.join(".", "visualizations", args.model_name)
 os.makedirs(save_folder, exist_ok=True)
-
-if args.neptune_user != "":
-    from utils.neptune_utils import reload_neptune_run
-
-    neptune_id_file = os.path.join(model_dir, 'neptune.txt')
-    run = reload_neptune_run(args.neptune_user, "non-free", neptune_id_file)
-else:
-    run = None
-
-# region LOAD DATASET
-if args.dataset != "symmetric_solids" and args.dataset != "modelnetso3":
-    dset, eval_dset = get_dataset(args.data_dir, args.dataset, args.dataset_name, so3_matrices=True)
-else:
-    dset, eval_dset = get_dataset(args.data_dir, args.dataset, args.dataset_name, so3_matrices=False)
-train_loader = torch.utils.data.DataLoader(dset, batch_size=100, shuffle=True)
-# endregion
-
-# region GET MODEL
-device = 'cpu'
-
-model = torch.load(model_file).to(device)
-model.eval()
-# endregion
-
-# region GET IMAGES
-img, img_next, action, n_stabilizers = next(iter(train_loader))
-action = action.squeeze(1)
-img_shape = np.array(img.shape[1:])
-# endregion
-
-
-# Get the numpy array versions of the images
-npimages = torch_data_to_numpy(img)
-npimages_next = torch_data_to_numpy(img_next)
-npimages_eval = eval_dset.flat_images_numpy
-
-# Calculate the parameters obtained by the models
-mean = model.encode(img.to(device))
-mean_next = model.encode(img_next.to(device))
-
-# Obtain the values as numpy arrays
-mean_numpy = mean.detach().cpu().numpy()
-mean_next = mean_next.detach().cpu().numpy()
-mean_rot = model.act(mean, action).detach().cpu().numpy()
-
-action = action.detach().cpu().numpy()
 
 
 def get_pca_model(data, n_components=2):
@@ -93,47 +61,56 @@ def get_normalizing_constant(pca, n_data):
     return normalizing_constant
 
 
-print("MEAN SHAPE!!!", mean_numpy.shape, np.unique(mean_numpy))
-# region PLOT VOXELS
+# region SETUP NEPTUNE
+if args.neptune_user != "":
+    from utils.neptune_utils import reload_neptune_run
 
-fig = plt.figure(figsize=(10, 10))
-num_filters = 36
-nx, ny, nz = mean_numpy.shape[2:]
-for i in range(num_filters):
-    ax = fig.add_subplot(6, 6, i + 1)
-    for x in range(nx):
-        for y in range(ny):
-            for z in range(nz):
-                if mean_numpy[0, i][x, y, z] > 0:
-                    ax.scatter(x, y, c='b', marker='s',
-                               alpha=mean_numpy[0, i][x, y, z] / np.amax(mean_numpy[0, i]))
-                    ax.set_xticks([])
-                    ax.set_yticks([])
-if run is not None:
-    run[f"voxel_filter_above {i}"].upload(plt.gcf())
-
-
-
-fig = plt.figure(figsize = (10, 10))
-num_filters = 36
-nx, ny, nz = mean_numpy.shape[2:]
-for i in range(num_filters):
-    ax = fig.add_subplot(6,6, i+1, projection='3d')
-    for x in range(nx):
-        for y in range(ny):
-            for z in range(nz):
-                if mean_numpy[0, i][x, y, z] > 0:
-                    ax.scatter(x, y, z, c='b', marker='s', alpha=mean_numpy[0, i][x, y, z]/np.amax(mean_numpy[0, i]))
-                    ax.set_xticks([])
-                    ax.set_yticks([])
-                    ax.set_zticks([])
-if run is not None:
-    run[f"voxel_filter {i}"].upload(plt.gcf())
-
-
-
+    neptune_id_file = os.path.join(model_dir, 'neptune.txt')
+    run = reload_neptune_run(args.neptune_user, "non-free", neptune_id_file)
+else:
+    run = None
 # endregion
 
+# region LOAD DATASET
+if args.dataset != "symmetric_solids" and args.dataset != "modelnetso3":
+    dset, eval_dset = get_dataset(args.data_dir, args.dataset, args.dataset_name, so3_matrices=True)
+else:
+    dset, eval_dset = get_dataset(args.data_dir, args.dataset, args.dataset_name, so3_matrices=False)
+train_loader = torch.utils.data.DataLoader(dset, batch_size=100, shuffle=False)
+# endregion
+
+# region GET MODEL
+device = 'cpu'
+
+model = torch.load(model_file).to(device)
+model.eval()
+# endregion
+
+# region GET IMAGES
+img, img_next, action, n_stabilizers = next(iter(train_loader))
+action = action.squeeze(1)
+img_shape = np.array(img.shape[1:])
+# endregion
+
+# region GET NUMPY DATA
+# Get the numpy array versions of the images
+npimages = torch_data_to_numpy(img)
+npimages_next = torch_data_to_numpy(img_next)
+npimages_eval = eval_dset.flat_images_numpy
+# endregion
+
+# region GET EMBEDDINGS
+# Calculate the parameters obtained by the models
+mean = model.encode(img.to(device))
+mean_next = model.encode(img_next.to(device))
+
+# Obtain the values as numpy arrays
+mean_numpy = mean.detach().cpu().numpy()
+mean_next = mean_next.detach().cpu().numpy()
+mean_rot = model.act(mean, action).detach().cpu().numpy()
+action = action.detach().cpu().numpy()
+print("MEAN SHAPE!!!", mean_numpy.shape, np.unique(mean_numpy))
+# endregion
 
 # region PLOT ROTATED EMBEDDINGS
 flat_mean = mean_numpy.reshape(mean_numpy.shape[0], -1)
@@ -167,48 +144,180 @@ for i in range(5):
 
     plt.savefig(os.path.join(save_folder, f"test_image_{i}.png"), bbox_inches='tight')
 
-eval_indices = np.arange(0, len(eval_dset.data[0]), len(eval_dset.data[0]) // 36)
+
+print("Dataset", args.dataset)
+orbitnum = 0
 if args.dataset != "symmetric_solids" and args.dataset != "modelnetso3":
-    eval_mean = model.encode(torch.tensor(eval_dset.data[0][eval_indices], dtype=img.dtype).to(device))
+    print(len(eval_dset.data[orbitnum]))
+    eval_indices = np.arange(0, len(eval_dset.data[orbitnum]), 1)
+    eval_mean = model.encode(torch.tensor(eval_dset.data[orbitnum][eval_indices], dtype=img.dtype).to(device))
+    projected_eval = np.expand_dims(
+        pca_model.transform(eval_mean.reshape(eval_mean.shape[0], -1).detach().cpu().numpy()) / normalizing_constant,
+        axis=1)
+    std_eval = np.ones_like(projected_eval) * 0.1
+    print("Projected eval shape", projected_eval.shape, "Std eval shape", std_eval.shape)
+    figures = save_embeddings_on_circle(projected_eval, std_eval, eval_dset.flat_stabs[eval_indices], save_folder,
+                                        args.dataset_name[
+                                            orbitnum], increasing_radius=True)
+    if run is not None:
+        print(figures)
+        run["embeddings_on_circle"].upload(figures[0])
 else:
+    eval_indices = np.arange(0, len(eval_dset.flat_images), len(eval_dset.flat_images) // 36)
     eval_mean = model.encode(torch.tensor(eval_dset.flat_images[eval_indices], dtype=img.dtype).to(device))
 
-projected_eval = np.expand_dims(
-    pca_model.transform(eval_mean.reshape(eval_mean.shape[0], -1).detach().cpu().numpy()) / normalizing_constant,
-    axis=1)
-std_eval = np.ones_like(projected_eval) * 0.1
-print("Projected eval shape", projected_eval.shape, "Std eval shape", std_eval.shape)
-figures = save_embeddings_on_circle(projected_eval, std_eval, eval_dset.flat_stabs[eval_indices], save_folder,
-                                    args.dataset_name[
-                                        0], increasing_radius=True)
+# endregion
 
-if run is not None:
-    print(figures)
-    run["embeddings_on_circle"].upload(figures[0])
+if args.dataset != "symmetric_solids":
 
-# Select an image from each of the unique stabilizer objects
-print("Shape of eval data", eval_dset.data.shape, eval_dset.flat_images.shape)
-for num_dataset in range(1):
+    # region GET EMBEDDINGS DLSBD
+    flat_images_tensor = torch.Tensor(eval_dset.flat_images).to(device)  # transform to torch tensor
+    eval_tensor_dset = torch.utils.data.TensorDataset(flat_images_tensor)  # create your datset
+    eval_dataloader = torch.utils.data.DataLoader(eval_tensor_dset, batch_size=args.batch_size)
+    mean_dlsbd = []
+    for num_batch, batch in enumerate(eval_dataloader):
+        print("Encoding batch", num_batch)
+        mean_eval_ = model.encode(batch[0])
+        mean_dlsbd.append(mean_eval_)
+    mean_dlsbd = torch.cat(mean_dlsbd, dim=0)
+    # endregion
 
-    # region PLOT RECONSTRUCTIONS
-    x_rec = model.decode(eval_mean)
-    x_rec = x_rec.permute((0, 2, 3, 1)).detach().cpu().numpy()
-
-    # Plot the reconstructions in rows of 10
-    fig, axes = plt.subplots(2, 10, figsize=(20, 4))
-    i = 0
-    axes[0, 0].set_ylabel("Original")
-    axes[1, 0].set_ylabel("Reconstruction")
-    for j in range(10):
-        axes[0, j].imshow(eval_dset.flat_images_numpy[i + j])
-        axes[1, j].imshow(x_rec[i + j])
-        axes[0, j].set_xticks([])
-        axes[0, j].set_yticks([])
-        axes[1, j].set_xticks([])
-        axes[1, j].set_yticks([])
+    # region ESTIMATE DLSBD METRIC
+    print("Mean dlsbd shape", mean_dlsbd.shape)
+    reshaped_mean_eval = mean_dlsbd.reshape((eval_dset.num_objects, -1, np.prod(list(mean_dlsbd.shape[-4:])))).detach().cpu().numpy()
+    print("Reshaped mean eval shape", reshaped_mean_eval.shape)
+    n_subgroups = 1
+    k_values = create_combinations_omega_values_range(-10, 10, n_subgroups)
+    dlsbd_values = []
+    for reshaped_mean in reshaped_mean_eval:
+        object_mean = np.expand_dims(reshaped_mean, axis=0)
+        dlsbd_values.append(dlsbd(object_mean, k_values, be_verbose=1, factor_manifold="cylinder")[0])
+    dlsbd_metric = np.mean(dlsbd_values)
+    print("DLSBD values", dlsbd_values)
+    print("DLSBD", dlsbd_metric)
+    model_path = os.path.join(args.checkpoints_dir, args.model_name)
+    np.save(f'{model_path}/dlsbd.npy', dlsbd_metric)
     if run is not None:
-        run[f"reconstructions {num_dataset}"].upload(plt.gcf())
-    plt.close("all")
+        run["metrics/dlsbd"].log(dlsbd_metric)
+    # endregion
+
+# region PLOT UNIQUE
+# Select an image from each of the unique stabilizer objects
+print("Shape of eval data", eval_dset.data.shape, eval_dset.flat_images.shape, eval_mean.shape)
+# region PLOT RECONSTRUCTIONS
+x_rec = model.decode(eval_mean)
+x_rec = x_rec.permute((0, 2, 3, 1)).detach().cpu().numpy()
+
+# Plot the reconstructions in rows of 10
+num_images = 10
+fig, axes = plt.subplots(3, num_images, figsize=(20, 4))
+i = 0
+axes[0, 0].set_ylabel("Original")
+axes[1, 0].set_ylabel("Reconstruction")
+axes[2, 0].set_ylabel("Filter 1")
+
+
+indexes = np.arange(0, len(eval_dset.data[orbitnum]), len(eval_dset.data[orbitnum])//num_images)
+for j in indexes:
+    axes[0, j].imshow(np.moveaxis(eval_dset.data[orbitnum][j], 0, -1))
+    axes[1, j].imshow(x_rec[i + j])
+    axes[0, j].set_xticks([])
+    axes[0, j].set_yticks([])
+    axes[1, j].set_xticks([])
+    axes[1, j].set_yticks([])
+    projected_top = np.mean(np.abs(eval_mean[j, 0].detach().numpy()), keepdims=True, axis=-1)
+    projected_top = np.clip(projected_top[:, :, 0], 0, np.amax(projected_top))
+    axes[2, j].imshow(projected_top, cmap="Reds")
+    axes[2, j].set_xticks([])
+    axes[2, j].set_yticks([])
+if run is not None:
+    run[f"reconstructions"].upload(plt.gcf())
+plt.close("all")
+# endregion
+
+
+# region CALCULATE HITRATE
+# Setup torch dataset use separate data as validation
+if (args.dataset != "symmetric_solids") and (args.dataset != "modelnetso3"):
+    dset_val = EquivDataset(f'{args.data_dir}/{args.dataset}/',
+                            list_dataset_names=[dataset_name + "_val" for dataset_name in args.dataset_name],
+                            max_data_per_dataset=-1, so3_matrices=True)
+else:
+    dset_val = EquivDataset(f'{args.data_dir}/{args.dataset}/',
+                            list_dataset_names=[dataset_name + "_val" for dataset_name in args.dataset_name],
+                            max_data_per_dataset=-1)
+val_loader = torch.utils.data.DataLoader(dset_val, batch_size=args.batch_size, shuffle=True)
+total_batches = len(val_loader)
+mu_hitrate = 0
+for batch_idx, (image, img_next, action) in enumerate(val_loader):
+    batch_size = image.shape[0]
+    encoded_image = model.encode(image)
+    encoded_image_next = model.encode(img_next)
+    action = action.to(device).squeeze(1)
+    encoded_image_transformed = model.act(encoded_image, action)
+    encoded_image_transformed_flat = encoded_image_transformed.view((batch_size, -1))
+    encoded_image_next_flat = encoded_image_next.view((batch_size, -1))
+    dist_matrix = ((encoded_image_transformed_flat.unsqueeze(0) - encoded_image_next_flat.unsqueeze(1)) ** 2).sum(-1)
+    hitrate = hitRate_generic(dist_matrix, batch_size)
+    mu_hitrate += hitrate.item()
+mu_hitrate /= total_batches
+model_path = os.path.join(args.checkpoints_dir, args.model_name)
+np.save(f'{model_path}/errors_hitrate.npy', [mu_hitrate])
+print(f"Hitrate: {mu_hitrate}")
+if run is not None:
+    run["metrics/hitrate"].log(mu_hitrate)
+# endregion
+
+
+# region PLOT VOXELS
+fig = plt.figure(figsize=(10, 10))
+
+num_filters = mean_numpy.shape[1]
+nx, ny, nz = mean_numpy.shape[2:]
+print(mean_numpy.shape)
+for i in range(num_filters):
+    ax = fig.add_subplot(6, 6, i + 1)
+    projected_top = np.mean(np.abs(mean_numpy[0, i]), keepdims=True, axis=-1)
+    projected_top = np.clip(projected_top, 0, np.amax(projected_top))
+    ax.imshow(projected_top[...,-1], cmap="Reds")
+    ax.set_xticks([])
+    ax.set_yticks([])
+if run is not None:
+    run[f"voxel_filter_above"].upload(plt.gcf())
+
+fig = plt.figure(figsize=(10, 10))
+num_filters = mean_numpy.shape[1]
+colors = np.ones((*mean_numpy[0, 0].shape, 4))
+colors[..., 1] = np.zeros_like(mean_numpy[0, 0])
+colors[..., 2] = np.zeros_like(mean_numpy[0, 0])
+
+for i in range(num_filters):
+    ax = fig.add_subplot(6, 6, i + 1, projection='3d')
+    voxelarray = mean_numpy[0, i] > 0
+    colors[..., 3] = mean_numpy[0, i] / (np.amax(mean_numpy[0, i])+1e-5)
+    ax.voxels(voxelarray, facecolors=colors)
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.set_zticks([])
+if run is not None:
+    run[f"voxel_filter_positive"].upload(plt.gcf())
+
+for i in range(num_filters):
+    ax = fig.add_subplot(6, 6, i + 1, projection='3d')
+    voxelarray = mean_numpy[0, i] < 0
+    colors[..., 3] = -mean_numpy[0, i] / (np.amax(mean_numpy[0, i])+1e-5)
+    ax.voxels(voxelarray, facecolors=colors)
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.set_zticks([])
+if run is not None:
+    run[f"voxel_filter_negative"].upload(plt.gcf())
+
+# endregion
+
+
+
+
 
 #     # TODO Fix latent traversal
 #     # region LATENT TRAVERSAL
