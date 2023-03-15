@@ -116,11 +116,22 @@ class EquivarianceLoss:
             n_samples = self.kwargs["n_samples"]
         else:
             n_samples = 20
+        if "chamfer_reg" not in self.kwargs:
+            chamfer_reg = 1.0
+        else:
+            chamfer_reg = self.kwargs["chamfer_reg"]
         # Transform mean1 to angle
         sample1 = p1.sample((n_samples,))
         sample2 = p2.sample((n_samples,))
 
-        return -p2.log_prob(sample1).sum(0).mean() - p1.log_prob(sample2).sum(0).mean()
+        entropy1 = -p1.log_prob(sample1).sum(0).mean()
+        entropy2 = -p2.log_prob(sample2).sum(0).mean()
+        kl12 = p1.log_prob(sample1).sum(0).mean() - p2.log_prob(sample1).sum(0).mean()
+        kl21 = p2.log_prob(sample2).sum(0).mean() - p1.log_prob(sample2).sum(0).mean()
+
+        # TODO: Changed to entropy to weight
+        return chamfer_reg * (entropy1 + entropy2) + kl12 + kl21
+        # return -p2.log_prob(sample1).sum(0).mean() - p1.log_prob(sample2).sum(0).mean()
 
     def __call__(self, p, p_next):
         return self.loss_function(p, p_next)
@@ -165,7 +176,7 @@ class IdentityLoss:
 
 
 class ReconstructionLoss:
-    def __init__(self, loss_type: str, **kwargs):
+    def     __init__(self, loss_type: str, **kwargs):
         self.kwargs = kwargs
         self.loss_function = loss_type
 

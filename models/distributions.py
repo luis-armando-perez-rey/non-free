@@ -25,9 +25,9 @@ class MixturePrior(D.Distribution):
                 concentration = self.kwargs["concentration"]
             else:
                 concentration = 0.01
-                self._prior = torch.distributions.von_mises.VonMises(
-                torch.tensor(2 * np.pi) * torch.rand((self.batch_size, self.num_components)).to(self.device),
-                torch.tensor(concentration) * torch.ones((self.batch_size, self.num_components)).to(self.device))
+                self._prior = D.von_mises.VonMises(
+                    torch.tensor(2 * np.pi) * torch.rand((self.batch_size, self.num_components)).to(self.device),
+                    torch.tensor(concentration) * torch.ones((self.batch_size, self.num_components)).to(self.device))
 
 
 class MixtureDistribution(D.MixtureSameFamily):
@@ -74,6 +74,15 @@ class MixtureDistribution(D.MixtureSameFamily):
         posterior_samples = self.sample((n_samples,))
         return self.log_prob(posterior_samples).mean() - p.log_prob(posterior_samples).mean()
 
+    def approximate_kl_components(self, p: D.Distribution, n_samples: int = 20) -> torch.Tensor:
+        # Sample from the current distribution
+        posterior_samples = self.components.sample((n_samples,))
+        # Calculate the approximate entropy of the posterior
+        component_log_prob = self.components.log_prob(posterior_samples).mean()
+        # Calculate the approximate cross entropy of the prior. Assume that the prior is the same for each batch element
+        prior_log_prob = p.log_prob(posterior_samples.view((-1, posterior_samples.shape[1]))).mean()
+        return component_log_prob - prior_log_prob
+
     def entropy(self):
         return NotImplementedError()
 
@@ -102,15 +111,26 @@ def get_z_values(p: MixtureDistribution, extra: torch.tensor, n_samples: int, au
     """
     if autoencoder_type.startswith("ae"):
         z = p.input_mean
+        if extra is not None:
+            extra_repeated = extra.unsqueeze(1).repeat(1, z.shape[1], 1)
+            z = torch.cat([z.view((z.shape[0], z.shape[1], -1)), extra_repeated], dim=-1)
     elif autoencoder_type == "vae":
-        z = torch.movedim(p.sample_latent((n_samples,)), 0, 1)
+        # z = torch.movedim(p.sample_latent((n_samples,)), 0, 1)
+        z = p.input_mean
+        if extra is not None:
+            # Sample from posterior over Z_I
+            loc_extra = extra[..., :extra.shape[-1] // 2]
+            logvar_extra = extra[..., extra.shape[-1] // 2:]
+            p_orbit = torch.distributions.Normal(loc_extra, torch.exp(logvar_extra / 2.0))
+            extra_sample = p_orbit.sample()
+            # Repeat samples from Z_I to match the number of samples from Z_G
+            extra_repeated = extra_sample.unsqueeze(1).repeat(1, z.shape[1], 1)
+            z = torch.cat([z.view((z.shape[0], z.shape[1], -1)), extra_repeated], dim=-1)
+
     else:
         z = None
         ValueError(f"Autoencoder type {autoencoder_type} not defined")
     # Do not change order! Append of extra dimension should be done after Von-Mises projection
-    if extra is not None:
-        extra_repeated = extra.unsqueeze(1).repeat(1, z.shape[1], 1)
-        z = torch.cat([z, extra_repeated], dim=-1)
     return z
 
 
@@ -149,6 +169,11 @@ def get_prior(batch_size: int, num_components: int, latent_dim: int, prior_type:
         mix = D.Categorical(torch.ones((batch_size, num_components)).to(device))
         component = D.Independent(D.Normal(mean, scale=1.0 / concentration), 1)
         prior = D.MixtureSameFamily(mix, component)
+    elif prior_type == "gaussian":
+        # print("Using gaussian prior")
+        prior = D.Independent(
+            D.Normal(torch.zeros((batch_size, latent_dim)).to(device), torch.ones((batch_size, latent_dim)).to(device)),
+            1)
     else:
         prior = None
         ValueError(f"{prior_type} not available")
