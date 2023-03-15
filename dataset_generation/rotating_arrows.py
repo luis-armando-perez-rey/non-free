@@ -105,7 +105,7 @@ class ArrowCanvas:
     def show():
         plt.show()
 
-
+COLOR_DICT = {"tab:red":0,"tab:blue": 1, "tab:orange":2, "tab:green":3,  "tab:purple":4}
 def generate_training_data(num_arrows_list, dataset_folder, dataset_name, style_list: Optional[List[str]] = None,
                            color_list: Optional[List[str]] = None, radius_list: Optional[List[float]] = None,
                            examples_per_num_arrows: int = 100,
@@ -113,6 +113,7 @@ def generate_training_data(num_arrows_list, dataset_folder, dataset_name, style_
     equiv_data = []
     equiv_lbls = []
     equiv_stabilizers = []
+    extra_factors = []
     if not os.path.exists(dataset_folder):
         os.makedirs(dataset_folder)
     if style_list is None:
@@ -177,18 +178,23 @@ def generate_training_data(num_arrows_list, dataset_folder, dataset_name, style_
 
                             equiv_data.append([img1, img2])
                             equiv_lbls.append(angle)
+                            extra_factors.append(COLOR_DICT[color])
                             equiv_stabilizers.append(num_arrows)
                             plt.close("all")
     equiv_data = np.array(equiv_data)
     equiv_lbls = np.array(equiv_lbls)
     equiv_stabilizers = np.array(equiv_stabilizers)
+    extra_factors = np.array(extra_factors)
     print("Equiv data shape", equiv_data.shape)
     print("Equiv lbls shape", equiv_lbls.shape)
     print("Equiv stabilizers shape", equiv_stabilizers.shape)
+    print("Extra factors shape", extra_factors.shape)
+
 
     np.save(os.path.join(dataset_folder, dataset_name + '_data.npy'), equiv_data)
     np.save(os.path.join(dataset_folder, dataset_name + '_lbls.npy'), equiv_lbls)
     np.save(os.path.join(dataset_folder, dataset_name + '_stabilizers.npy'), equiv_stabilizers)
+    np.save(os.path.join(dataset_folder, dataset_name + '_extra_factors.npy'), extra_factors)
 
 
 def generate_eval_data(num_arrows_list, dataset_folder, dataset_name, style_list: Optional[List[str]] = None,
@@ -208,6 +214,7 @@ def generate_eval_data(num_arrows_list, dataset_folder, dataset_name, style_list
     images = []
     stabilizers = []
     labels = []
+    extra_factors = []
     for num_arrows in num_arrows_list:
         for style in style_list:
             for color in color_list:
@@ -231,17 +238,23 @@ def generate_eval_data(num_arrows_list, dataset_folder, dataset_name, style_list
                         plt.close("all")
                         labels_per_object.append(angle)
                     images.append(images_per_object)
+                    extra_factors.append(COLOR_DICT[color])
                     stabilizers.append([num_arrows] * total_rotations)
                     labels.append(labels_per_object)
     images = np.array(images)
     stabilizers = np.array(stabilizers)
     labels = np.array(labels)
+    extra_factors = np.array(extra_factors)
+
     print("Images shape", images.shape)
     print("Stabilizers shape", stabilizers.shape)
     print("Labels shape", labels.shape)
+    print("Extra factors shape", extra_factors.shape)
+
     np.save(os.path.join(dataset_folder, dataset_name + '_eval_data.npy'), images)
     np.save(os.path.join(dataset_folder, dataset_name + '_eval_lbls.npy'), labels)
     np.save(os.path.join(dataset_folder, dataset_name + '_eval_stabilizers.npy'), stabilizers)
+    np.save(os.path.join(dataset_folder, dataset_name + '_eval_extra_factors.npy'), extra_factors)
 
 
 def generate_two_arrows_train(num_arrows_pairs, dataset_folder, dataset_name,

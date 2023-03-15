@@ -5,7 +5,7 @@ from dataset_generation.simple_sinusoidal import generate_dataset_sinusoidals, g
 from dataset_generation import image_translation, dsprites_loader, symmetric_solids, rotating_arrows, rotating_mnist, \
     modelnet, modelnet_so3
 
-from quessard.data.discrete_data_generation import generate_arrow_array
+from quessard.data.discrete_data_generation import generate_arrow_array, generate_modelnet_array
 
 parser = argparse.ArgumentParser()
 # Dataset
@@ -132,6 +132,16 @@ def generate_dataset(dataset):
                                         total_angles=720)
         modelnet.generate_eval_data("./data/modelnet", args.dataset_name, object_name=render_details[0],
                                     object_id=render_details[1])
+    elif dataset == "modelnet_quessard":
+        # This dataset needs to be called with + sign i.e. airplane_0+chair_0
+
+        object_keys = str(args.dataset_name).split("-")
+        print(object_keys)
+        for object_key in object_keys:
+            assert object_key in modelnet.render_dictionary.keys(), f"Unknown modelnet object {object_key}"
+        object_filename_root_list = ["_".join(modelnet.render_dictionary[x]) for x in object_keys]
+        generate_modelnet_array("./data/modelnet", args.dataset_name, object_filename_root_list,
+                                total_angles=720)
     elif dataset == "modelnetso3":
         os.makedirs("./data/" + dataset, exist_ok=True)
         modelnet_so3.generate_data(dataset_name=args.dataset_name, load_folder="./data/modelnet_renders",

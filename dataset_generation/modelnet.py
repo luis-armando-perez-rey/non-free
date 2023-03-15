@@ -6,7 +6,7 @@ from skimage.transform import resize
 from typing import Tuple, Optional, List
 from PIL import Image
 
-stabilizer_dict = {"bathtub": 2, "airplane": 1, "stool": 0, "bench": 3, "bottle":5, "chair":10, "lamp": 1, "bookshelf":2}
+stabilizer_dict = {"bathtub": 2, "airplane": 1, "stool": 4, "bench": 3, "bottle":5, "chair":4, "lamp": 4, "bookshelf":2}
 
 
 def process_pil_image(img):
@@ -17,12 +17,14 @@ def process_pil_image(img):
 
 
 render_dictionary = {"bathtub_0": ["bathtub", "0019"],
+                     "bathtub_0_val": ["bathtub", "0019"],
                      "bathtub_1": ["bathtub", "0020"],
                      "bathtub_2": ["bathtub", "0038"],
                      "bathtub_3": ["bathtub", "0096"],
                      "bathtub_4": ["bathtub", "0108"],
                      # Benches
                      "bench_0": ["bench", "0051"],
+                     "bench_0_val": ["bench", "0051"],
                      "bench_1": ["bench", "0116"],
                      "bench_2": ["bench", "0117"],
                      "bench_3": ["bench", "0174"],
@@ -34,13 +36,15 @@ render_dictionary = {"bathtub_0": ["bathtub", "0019"],
                      "stool_2": ["stool", "0101"],
                      "stool_3": ["stool", "0106"],
                      "airplane_0": ["airplane", "0001"],
-                     "airplane_0_val": ["stool", "0092"],
+                     "airplane_0_val": ["airplane", "0001"],
                      "bottle_0": ["bottle", "0001"],
                      "bottle_0_val": ["bottle", "0001"],
                      "chair_0": ["chair", "0889"],
                     "chair_0_val": ["chair", "0889"],
                      "lamp_0": ["lamp", "0122"],
+                     "lamp_0_val": ["lamp", "0122"],
                      "bookshelf_0": ["bookshelf", "0004"],
+                     "bookshelf_0_val": ["bookshelf", "0004"],
                      }
 
 
@@ -53,6 +57,7 @@ def generate_training_data(dataset_folder, dataset_name, object_name: str, objec
     equiv_data = []
     equiv_lbls = []
     equiv_stabilizers = []
+    orbit_info = []
     if not os.path.exists(dataset_folder):
         os.makedirs(dataset_folder)
 
@@ -74,17 +79,21 @@ def generate_training_data(dataset_folder, dataset_name, object_name: str, objec
         print(
             "Generating image with digit number {}, num example {} angle {}".format(object_name, num_example, angle))
         equiv_stabilizers.append(stabilizer_dict[object_name])
+        orbit_info.append(object_filename_root)
 
     equiv_data = np.array(equiv_data)
     equiv_lbls = np.array(equiv_lbls)
     equiv_stabilizers = np.array(equiv_stabilizers)
+    orbit_info = np.array(orbit_info)
     print("Equiv data shape", equiv_data.shape)
     print("Equiv lbls shape", equiv_lbls.shape)
     print("Equiv stabilizers shape", equiv_stabilizers.shape)
+    print("Orbit info shape", orbit_info.shape)
 
     np.save(os.path.join(dataset_folder, dataset_name + '_data.npy'), equiv_data)
     np.save(os.path.join(dataset_folder, dataset_name + '_lbls.npy'), equiv_lbls)
     np.save(os.path.join(dataset_folder, dataset_name + '_stabilizers.npy'), equiv_stabilizers)
+    np.save(os.path.join(dataset_folder, dataset_name + '_orbit.npy'), orbit_info)
 
 
 def generate_eval_data(dataset_folder, dataset_name, object_name: str, object_id: str, split: str = "train",
@@ -92,15 +101,17 @@ def generate_eval_data(dataset_folder, dataset_name, object_name: str, object_id
     if not os.path.exists(dataset_folder):
         os.makedirs(dataset_folder)
     # Regular dataset
+    num_angles = 10
     images = []
     stabilizers = []
     labels = []
-    angles = np.arange(0, total_rotations, total_rotations // 360)
+    angles = np.arange(0, total_rotations, total_rotations // num_angles)
     render_path = os.path.join(".", "data", "modelnet_renders", "renders", object_name, split)
     object_filename_root = object_name + "_" + object_id
 
     images_per_object = []
     labels_per_object = []
+    orbit_info = []
     for num_angle, angle in enumerate(angles):
         print(
             "Generating image with digit number {}, num example {}".format(object_name, num_angle))
@@ -111,18 +122,22 @@ def generate_eval_data(dataset_folder, dataset_name, object_name: str, object_id
         images_per_object.append(image)
         labels_per_object.append(angle * np.pi / 180)
 
-    stabilizers.append([stabilizer_dict[object_name]] * total_rotations)
+    stabilizers.append([stabilizer_dict[object_name]] * len(angles))
     images.append(images_per_object)
     labels.append(labels_per_object)
+    orbit_info.append([object_filename_root] * len(angles))
 
     images = np.array(images)
     stabilizers = np.array(stabilizers)
     labels = np.array(labels)
+    orbit_info = np.array(orbit_info)
     print("Images shape", images.shape)
     print("Stabilizers shape", stabilizers.shape)
     print("Labels shape", labels.shape)
+    print("Orbit info shape", orbit_info.shape)
     np.save(os.path.join(dataset_folder, dataset_name + '_eval_data.npy'), images)
     np.save(os.path.join(dataset_folder, dataset_name + '_eval_lbls.npy'), labels)
     np.save(os.path.join(dataset_folder, dataset_name + '_eval_stabilizers.npy'), stabilizers)
+    np.save(os.path.join(dataset_folder, dataset_name + '_eval_orbit.npy'), orbit_info)
 
 # if __name__ == "__main__":
