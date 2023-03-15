@@ -2,7 +2,7 @@ import neptune.new as neptune
 from typing import Optional
 
 def initialize_neptune_run(user, project_name):
-    run = neptune.init(project=f"{user}/{project_name}")
+    run = neptune.init_run(project=f"{user}/{project_name}")
     return run
 
 def reload_neptune_run(user, project_name, path:str):

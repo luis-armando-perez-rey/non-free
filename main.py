@@ -18,6 +18,7 @@ if args.neptune_user != "":
 
     run = initialize_neptune_run(args.neptune_user, "non-free")
     run["parameters"] = vars(args)
+    run["sys/tags"].add(args.neptunetags)
 else:
     run = None
 print(args)
@@ -65,15 +66,13 @@ else:
     dset_val = EquivDataset(f'{args.data_dir}/{args.dataset}/',
                             list_dataset_names=[dataset_name + "_val" for dataset_name in args.dataset_name],
                             max_data_per_dataset=-1)
-    if args.dataset != "symmetric_solids":
-        dset_eval = EvalDataset(f'{args.data_dir}/{args.dataset}/', list_dataset_names=args.dataset_name)
-        eval_images = torch.FloatTensor(dset_eval.data.reshape(-1, dset_eval.data.shape[-1]))
-        stabilizers = dset_eval.stabs.reshape((-1))
 
 # Setup torch dataset
 # dset, dset_val = torch.utils.data.random_split(dset, [len(dset) - int(len(dset) / 10), int(len(dset) / 10)])
 train_loader = torch.utils.data.DataLoader(dset, batch_size=args.batch_size, shuffle=True)
-val_loader = torch.utils.data.DataLoader(dset_val, batch_size=args.batch_size, shuffle=True)
+# Using a fixed eval batch size to calculate consistently the hit-rate
+eval_batchsize = 20
+val_loader = torch.utils.data.DataLoader(dset_val, batch_size=eval_batchsize, shuffle=True)
 
 print("# train set:", len(dset))
 print("# test set:", len(dset_val))
@@ -89,14 +88,23 @@ extra_dim = args.extra_dim  # the invariant component
 
 print("Using model", args.model)
 if args.use_simplified:
-    model = MDNSimplified(img_shape[0], args.latent_dim, N, extra_dim, model=args.model, normalize_extra=True).to(
+    if args.autoencoder.startswith("vae"):
+        isvae = True
+    else:
+        isvae = False
+    model = MDNSimplified(img_shape[0], args.latent_dim, N, extra_dim, model=args.model, normalize_extra=True,
+                          vae=isvae).to(
         device)
 else:
     model = MDN(img_shape[0], args.latent_dim, N, extra_dim, model=args.model, normalize_extra=True).to(device)
 parameters = list(model.parameters())
 
-if args.autoencoder == "ae_single":
-    dec_dim = args.latent_dim
+if args.autoencoder == "ae_single" or args.autoencoder == "vae":
+    if args.latent_dim == 3:
+        dec_dim = args.latent_dim * 3
+    else:
+        dec_dim = args.latent_dim
+
 else:
     if args.latent_dim == 2:
         dec_dim = 2 * N
@@ -191,7 +199,6 @@ def train(epoch, data_loader, mode='train'):
             # z_mean_pred = (rot @ z_mean.unsqueeze(-1).detach()).squeeze(-1)  # Beware the detach!!!
             z_mean_pred = (rot @ z_mean.unsqueeze(-1)).squeeze(-1)  # Beware the detach!!!
         elif args.latent_dim == 3:
-            # print(z_mean.shape)
             # z_mean_pred = action @ z_mean.detach()
             # NOTICE!!!! Removed the detachment
             z_mean_pred = action @ z_mean
@@ -214,7 +221,12 @@ def train(epoch, data_loader, mode='train'):
 
         # region CALCULATE IDENTITY LOSS
         if extra_dim > 0:
-            loss_identity = identity_loss_function(extra, extra_next)
+            if args.autoencoder == "vae":
+                loc_extra = extra[-2 * args.extra_dim: -args.extra_dim]
+                loc_extra_next = extra_next[-2 * args.extra_dim: -args.extra_dim]
+                loss_identity = identity_loss_function(loc_extra, loc_extra_next)
+            else:
+                loss_identity = identity_loss_function(extra, extra_next)
             losses.append(loss_identity)
             mu_id_loss += loss_equiv.item()
             if run is not None:
@@ -226,29 +238,36 @@ def train(epoch, data_loader, mode='train'):
         # region CALCULATE RECONSTRUCTION LOSS
         reconstruction_loss = torch.tensor(0, dtype=image.dtype).to(device)
         if args.autoencoder != "None":
-            if args.autoencoder == "ae_single":
+            if args.autoencoder == "ae_single" or args.autoencoder == "vae":
                 """
                 Decode each of the group representations separately.
                 """
                 # Get latent variables
-                z = get_z_values(p, extra, args.num, args.autoencoder)
-                z_next = get_z_values(p_next, extra_next, args.num, args.autoencoder)
+
+                z = get_z_values(p=p, extra=extra, n_samples=args.num, autoencoder_type=args.autoencoder)
+                z_next = get_z_values(p=p_next, extra=extra_next, n_samples=args.num, autoencoder_type=args.autoencoder)
                 # Make the extra dimension invariant
                 z_next[..., -extra_dim:] = z[..., -extra_dim:]
                 # Calculate reconstruction loss for each of the latent representations
-                for n in range(args.num):
-                    x_rec = dec(z[:, n].detach())
-                    reconstruction_loss += rec_loss_function(x_rec, image).mean()
-                    # TODO: Removed reconstruction of next to have larger batch size
-                    # x_next_rec = dec(z_next[:, n].detach())
-                    # reconstruction_loss += rec_loss_function(x_next_rec, img_next).mean()
+                for n in range(N):
+                    # Divide loss by the number of embeddings and the pairs (2*N)
+                    # TODO: Removed detachment
+                    x_rec = dec(z_next[:, n, :].detach())
+                    # x_rec = dec(z_next[:, n, :])
+                    #TODO: CHanged when decoding one
+                    reconstruction_loss += rec_loss_function(x_rec, image).mean() / (N)
+                    # TODO: Removed reconstruction of next to have larger batch size but this removes the need for the
+                    #  extra dimension to be invariant
+                    # TODO: Removed detachment
+                    # x_next_rec = dec(z_next[:, n])
+                    # reconstruction_loss += rec_loss_function(x_next_rec, img_next).mean() / (2 * N)
             else:
                 # TODO: Review if re-attaching helps
                 x_rec = dec(torch.cat([z_mean.view((z_mean.shape[0], -1)), extra], dim=-1).detach())
                 reconstruction_loss += rec_loss_function(x_rec, image).mean()
             # TODO: Review if this helps
-            # x_rec_next = dec(torch.cat([z_mean_next.view((z_mean.shape[0], -1)), extra], dim=-1).detach())
-            # reconstruction_loss += rec_loss_function(x_rec_next, img_next).mean()
+            #     x_rec_next = dec(torch.cat([z_mean_next.view((z_mean.shape[0], -1)), extra], dim=-1).detach())
+            #     reconstruction_loss += rec_loss_function(x_rec_next, img_next).mean()
 
             losses.append(reconstruction_loss)
             if run is not None:
@@ -256,40 +275,52 @@ def train(epoch, data_loader, mode='train'):
         # endregion
 
         # region CALCULATE HIT-RATE
-        if args.latent_dim == 3:
-            chamfer_matrix = \
-                ((z_mean_pred.unsqueeze(1).unsqueeze(1) - z_mean_next.unsqueeze(2).unsqueeze(0)) ** 2).sum(-1).sum(
-                    -1).min(
-                    dim=-1)[
-                    0].sum(dim=-1)
+        if mode == "val":
+            if args.latent_dim == 3:
+                chamfer_matrix = \
+                    ((z_mean_pred.unsqueeze(1).unsqueeze(1) - z_mean_next.unsqueeze(2).unsqueeze(0)) ** 2).sum(-1).sum(
+                        -1).min(
+                        dim=-1)[
+                        0].sum(dim=-1)
+            else:
+                chamfer_matrix = \
+                    ((z_mean_pred.unsqueeze(1).unsqueeze(1) - z_mean_next.unsqueeze(2).unsqueeze(0)) ** 2).sum(-1).min(
+                        dim=-1)[
+                        0].sum(dim=-1)
+            if args.autoencoder == "vae":
+                loc_extra = extra[:, -2 * args.extra_dim: -args.extra_dim]
+                loc_extra_next = extra_next[:, -2 * args.extra_dim: -args.extra_dim]
+                extra_matrix = ((loc_extra.unsqueeze(0) - loc_extra_next.unsqueeze(1)) ** 2).sum(-1)
+            else:
+                extra_matrix = ((extra.unsqueeze(0) - extra_next.unsqueeze(1)) ** 2).sum(-1)
+            hitrate = hitRate_generic(chamfer_matrix + extra_matrix, image.shape[0])
+            mu_hit_rate += hitrate.item()
         else:
-            chamfer_matrix = \
-                ((z_mean_pred.unsqueeze(1).unsqueeze(1) - z_mean_next.unsqueeze(2).unsqueeze(0)) ** 2).sum(-1).min(
-                    dim=-1)[
-                    0].sum(dim=-1)
-        extra_matrix = ((extra.unsqueeze(0) - extra_next.unsqueeze(1)) ** 2).sum(-1)
-        hitrate = hitRate_generic(chamfer_matrix + extra_matrix, image.shape[0])
-        mu_hit_rate += hitrate.item()
+            hitrate = 0
         # endregion
 
         # region CALCULATE KL LOSS
-        if (args.autoencoder == "vae") and (
-                (args.enc_dist == "von-mises-mixture") or (args.enc_dist == "gaussian-mixture")):
+        if (args.autoencoder == "vae"):
             # Get prior for VAE model
             prior = get_prior(z_mean.shape[0], args.num, 2, args.prior_dist, device)
-            kl_loss = p.approximate_kl(prior) + p_next.approximate_kl(prior)
+            if (args.enc_dist == "von-mises-mixture"):
+                kl_loss = p.approximate_kl_components(prior) + p_next.approximate_kl_components(prior)
+            elif (args.enc_dist == "gaussian-mixture"):
+                kl_loss = p.approximate_kl(prior) + p_next.approximate_kl(prior)
+            else:
+                kl_loss = None
             losses.append(kl_loss)
         else:
             kl_loss = None
         # endregion
 
-        #region CALCULATE ENTROPY
+        # region CALCULATE ENTROPY
         if args.latent_dim == 3:
             mu_entropy += matrix_dist(z_mean, z_mean).mean()
         else:
             mu_entropy += estimate_entropy(p, 1000).item()
 
-        #endregion
+        # endregion
 
         # Sum all losses
         if mode == "train":
@@ -379,6 +410,12 @@ def train(epoch, data_loader, mode='train'):
         np.save(f'{model_path}/entropy_val.npy', entropy)
         np.save(f'{model_path}/errors_rec_val.npy', errors_rec)
         np.save(f'{model_path}/errors_hitrate.npy', errors_hitrate)
+        # if run is not None:
+        #     run["results/loss"].upload(f'{model_path}/errors_val.npy')
+        #     run["results/equiv"].upload(f'{model_path}/equiv_val.npy')
+        #     run["results/entropy"].upload(f'{model_path}/entropy_val.npy')
+        #     run["results/reconstruction"].upload(f'{model_path}/errors_rec_val.npy')
+        #     run["results/hitrate"].upload(f'{model_path}/errors_hitrate.npy')
 
         if args.autoencoder != "None":
             reconstruction_errors.append(reconstruction_loss.item())
@@ -388,13 +425,6 @@ def train(epoch, data_loader, mode='train'):
             save(model, model_file)
             if args.autoencoder != "None":
                 save(dec, decoder_file)
-        if (args.plot > 0) & ((epoch % (args.plot + 1)) == 0):
-            mean_eval, logvar_eval, extra_eval = model(eval_images.to(device))
-            if not (args.variablescale):
-                logvar_eval = -4.6 * torch.ones(logvar_eval.shape).to(logvar_eval.device)
-            std_eval = np.exp(logvar_eval.detach().cpu().numpy() / 2.) / 10
-            plot_save_folder = os.path.join(os.path.join(model_path, "figures"))
-            save_embeddings_on_circle(mean_eval, std_eval, stabilizers, plot_save_folder)
 
     # Write to standard output. Allows printing to file progress when using HPC
     sys.stdout.flush()

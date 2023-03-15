@@ -4,13 +4,10 @@ from torch import save
 import sys
 # Import datasets
 from datasets.equiv_dset import *
-from models.models_nn import *
 from utils.nn_utils import *
 from models.losses import ReconstructionLoss
-from models.distributions import MixtureDistribution, get_prior, get_z_values
 from ENR.models_ENR import *
-from ENR.config import ENR_CONFIG
-from ENR.transforms3d.conversions import rotation_matrix_z
+from ENR.config import get_enr_config
 
 # region PARSE ARGUMENTS
 parser = get_args()
@@ -20,6 +17,8 @@ if args.neptune_user != "":
 
     run = initialize_neptune_run(args.neptune_user, "non-free")
     run["parameters"] = vars(args)
+    print("Adding {} tags to Neptune".format(args.neptunetags))
+    run["sys/tags"].add(args.neptunetags)
 else:
     run = None
 print(args)
@@ -30,7 +29,7 @@ print(args)
 # Print set up torch device, empty cache and set random seed
 torch.cuda.empty_cache()
 # torch.manual_seed(args.seed)
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:" + args.gpu if torch.cuda.is_available() else "cpu")
 print('Using device: ', device)
 # endregion
 
@@ -62,8 +61,7 @@ if args.dataset == 'platonics':
 else:
     print(f"Loading dataset {args.dataset} with dataset name {args.dataset_name}")
 
-
-    if args.dataset != "symmetric_solids":
+    if (args.dataset != "symmetric_solids") and (args.dataset != "modelnetso3"):
         dset = EquivDataset(f'{args.data_dir}/{args.dataset}/', list_dataset_names=args.dataset_name,
                             max_data_per_dataset=args.ndatapairs, so3_matrices=True)
         dset_eval = EvalDataset(f'{args.data_dir}/{args.dataset}/', list_dataset_names=args.dataset_name)
@@ -73,27 +71,37 @@ else:
         dset = EquivDataset(f'{args.data_dir}/{args.dataset}/', list_dataset_names=args.dataset_name,
                             max_data_per_dataset=args.ndatapairs)
 
-# Setup torch dataset
-dset, dset_test = torch.utils.data.random_split(dset, [len(dset) - int(len(dset) / 10), int(len(dset) / 10)])
-train_loader = torch.utils.data.DataLoader(dset, batch_size=args.batch_size, shuffle=True)
-val_loader = torch.utils.data.DataLoader(dset_test, batch_size=args.batch_size, shuffle=True)
-print("# train set:", len(dset))
-print("# test set:", len(dset_test))
+# Setup torch dataset use separate data as validation
+if (args.dataset != "symmetric_solids") and (args.dataset != "modelnetso3"):
+    dset_val = EquivDataset(f'{args.data_dir}/{args.dataset}/',
+                            list_dataset_names=[dataset_name + "_val" for dataset_name in args.dataset_name],
+                            max_data_per_dataset=-1, so3_matrices=True)
+else:
+    dset_val = EquivDataset(f'{args.data_dir}/{args.dataset}/',
+                            list_dataset_names=[dataset_name + "_val" for dataset_name in args.dataset_name],
+                            max_data_per_dataset=-1)
 
+# dset, dset_test = torch.utils.data.random_split(dset, [len(dset) - int(len(dset) / 10), int(len(dset) / 10)])
+train_loader = torch.utils.data.DataLoader(dset, batch_size=args.batch_size, shuffle=True)
+val_loader = torch.utils.data.DataLoader(dset_val, batch_size=args.batch_size, shuffle=True)
+print("# train set:", len(dset))
+print("# test set:", len(dset_val))
 
 # Sample data
 img, _, acn = next(iter(train_loader))
 img_shape = img.shape[1:]
 # endregion
 
-
-model = NeuralRenderer(**ENR_CONFIG).to(device)
+enr_config = get_enr_config(args.latent_dim, n_channels=1)
+print(enr_config)
+model = NeuralRenderer(**enr_config).to(device)
 
 rec_loss_function = ReconstructionLoss(args.reconstruction_loss)
 optimizer = get_optimizer(args.optimizer, args.lr, model.parameters())
 
 errors = []
 hitrates = []
+
 
 def equivariance_loss(z_transformed, z_next):
     loss = ((z_transformed - z_next) ** 2).mean()
@@ -123,13 +131,10 @@ def train(epoch, data_loader, mode='train'):
         image = image.to(device)
         img_next = img_next.to(device)
         action = action.to(device).squeeze(1)
-        batch_size = image.shape[0]
-
         x_rec, _ = model(image, action)
         encoded_image = model.encode(image)
-        encoded_image_next = model.encode(image)
+        encoded_image_next = model.encode(img_next)
         encoded_image_transformed = model.act(encoded_image, action)
-
 
         equiv_loss_batch = equivariance_loss(encoded_image_transformed, encoded_image_next).item()
         equiv_loss += equiv_loss_batch
@@ -139,19 +144,19 @@ def train(epoch, data_loader, mode='train'):
 
         loss = rec_loss_function(x_rec, img_next).mean()
 
-
-
         # region CALCULATE HIT-RATE
-        encoded_image_transformed_flat = encoded_image_transformed.view((batch_size,-1))
-        encoded_image_next_flat = encoded_image_next.view((batch_size,-1))
-        dist_matrix = ((encoded_image_transformed_flat.unsqueeze(0) - encoded_image_next_flat.unsqueeze(1))**2).sum(-1)
+        encoded_image_transformed_flat = encoded_image_transformed.view((batch_size, -1))
+        encoded_image_next_flat = encoded_image_next.view((batch_size, -1))
+        dist_matrix = ((encoded_image_transformed_flat.unsqueeze(0) - encoded_image_next_flat.unsqueeze(1)) ** 2).sum(
+            -1)
         hitrate = hitRate_generic(dist_matrix, batch_size)
         mu_hitrate += hitrate.item()
-        #endregion
+        # endregion
 
         if run is not None:
             run[mode + "/batch/loss"].log(loss)
             run[mode + "/batch/equivariance_loss"].log(equiv_loss_batch)
+            run[mode + "/batch/hitrate"].log(hitrate)
 
         print(
             f"{mode.upper()} Epoch: {epoch}, Batch: {batch_idx} of {len(data_loader)} Loss: {loss:.3f} "
@@ -169,12 +174,13 @@ def train(epoch, data_loader, mode='train'):
 
     if mode == 'val':
         errors.append(mu_loss)
-        hitrates.appen(mu_hitrate)
+        hitrates.append(mu_hitrate)
         np.save(f'{model_path}/errors_val.npy', errors)
         np.save(f'{model_path}/errors_hitrate.npy', hitrates)
         if run is not None:
             run[mode + "/epoch/val_loss"].log(mu_loss)
             run[mode + "/epoch/equiv_loss"].log(equiv_loss)
+            run[mode + "/epoch/hitrate"].log(mu_hitrate)
         if (epoch % args.save_interval) == 0:
             save(model, model_file)
             print("Model saved", model_file)

@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.patches import Ellipse
 from typing import Optional
+from sklearn.decomposition import PCA
 
 AVAILABLE_TAB_COLORS = ["tab:blue", "tab:orange", "tab:green", "tab:red", "tab:purple", "tab:brown", "tab:pink",
                         "tab:gray", "tab:olive", "tab:cyan"]
@@ -28,6 +29,27 @@ def plot_extra_dims(extra_dims, color_labels: Optional = None):
         fig = None
         ax = None
     return fig, ax
+
+def plot_projected_embeddings_pca(embeddings, color_labels:Optional = None, ax:Optional = None):
+    # Plot embeddings
+    if embeddings.shape[-1] == 2:
+        print("PCA: Embeddings are already 2 dimensional, no PCA applied")
+        x_embedded = embeddings
+    else:
+        pca = PCA(n_components=2)
+        pca.fit(embeddings)
+        x_embedded = pca.transform(embeddings)
+    if ax is None:
+        fig, ax = plt.subplots(1, 1, figsize=(10, 10))
+    else:
+        fig = plt.gcf()
+    if color_labels is None:
+        ax.scatter(x_embedded[:, 0], x_embedded[:, 1])
+    else:
+        ax.scatter(x_embedded[:, 0], x_embedded[:, 1], c=color_labels)
+    ax.set_title("PCA object embeddings")
+    return fig, ax
+
 
 
 def plot_images_multi_reconstructions(images, reconstructions):

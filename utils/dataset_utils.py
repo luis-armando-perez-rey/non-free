@@ -1,4 +1,4 @@
-from datasets.equiv_dset import EquivDatasetStabs, EvalDataset, PlatonicMerged
+from datasets.equiv_dset import EquivDatasetStabs, EvalDataset, PlatonicMerged, FactorDataset
 
 
 def get_dataset(data_dir, dataset, dataset_name, so3_matrices=False):
@@ -12,13 +12,12 @@ def get_dataset(data_dir, dataset, dataset_name, so3_matrices=False):
 
     elif dataset == "symmetric_solids":
         dset = EquivDatasetStabs(f'{data_dir}/symmetric_solids/', list_dataset_names=dataset_name)
-        dset_eval = dset
+        eval_dset_names = [dataset_name + "_val" for dataset_name in dataset_name]
+        dset_eval = EquivDatasetStabs(f'{data_dir}/symmetric_solids/', list_dataset_names=eval_dset_names)
     elif dataset == "modelnetso3":
         dset = EquivDatasetStabs(f'{data_dir}/modelnetso3/', list_dataset_names=dataset_name)
         dset_eval = dset
-
     else:
         dset = EquivDatasetStabs(f'{data_dir}/{dataset}/', list_dataset_names=dataset_name, so3_matrices=so3_matrices)
         dset_eval = EvalDataset(f'{data_dir}/{dataset}/', list_dataset_names=dataset_name)
     return dset, dset_eval
-
