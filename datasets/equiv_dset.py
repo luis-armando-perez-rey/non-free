@@ -6,40 +6,51 @@ from typing import List, Optional
 import pickle
 import scipy
 
+
 class EquivDataset(torch.utils.data.Dataset):
-    def __init__(self, path: str, list_dataset_names=None, greyscale: bool = False,
+    def __init__(self, path: str, list_dataset_names: List[str], greyscale: bool = False,
                  max_data_per_dataset: int = -1, so3_matrices: bool = False):
-        if list_dataset_names is None:
-            list_dataset_names = ["equiv"]
         print(f"Loading the datasets {list_dataset_names}")
-        data = np.load(path + list_dataset_names[0] + '_data.npy', mmap_mode='r+')
+        # Properties
+        self.max_data_per_dataset = max_data_per_dataset
+        self.path = path
+        self.greyscale = greyscale
+        self.list_dataset_names = list_dataset_names
 
-        lbls = np.load(path + list_dataset_names[0] + '_lbls.npy', mmap_mode='r+')
-        if max_data_per_dataset > 0:
-            num_selected_data = np.min([max_data_per_dataset, len(data)])
-            if max_data_per_dataset > len(data):
-                print(
-                    f"Warning: max_data_per_dataset is larger than the number of data in the dataset {list_dataset_names[0]}")
-            data = data[:num_selected_data]
-            lbls = lbls[:num_selected_data]
-        self.data = data
-        self.lbls = lbls
-
-        for dataset_name in list_dataset_names[1:]:
-            data = np.load(path + dataset_name + '_data.npy', mmap_mode='r+')
-            lbls = np.load(path + dataset_name + '_lbls.npy', mmap_mode='r+')
-            if max_data_per_dataset > 0:
-                num_selected_data = np.min([max_data_per_dataset, len(data)])
-                if max_data_per_dataset > len(data):
-                    print(
-                        f"Warning: max_data_per_dataset is larger than the number of data in the dataset {dataset_name}")
-                data = data[:num_selected_data]
-                lbls = lbls[:num_selected_data]
-            self.data = np.concatenate([self.data, data], axis=0)
-            self.lbls = np.concatenate([self.lbls, lbls], axis=0)
+        # Load the data
+        self.data = self.load_data("data")
+        self.lbls = self.load_data("lbls")
         if so3_matrices:
             self.lbls = self.angles2so3(self.lbls)
-        self.greyscale = greyscale
+
+    def load_data(self, factor_name):
+        """
+        Load the data from the numpy files created during data generation examples: data, lbls, stabs
+        :param factor_name: name of the factor data to be loaded
+        :return:
+        """
+        factor_filepath = self.path + self.list_dataset_names[0] + '_' + factor_name + '.npy'
+        assert os.path.exists(factor_filepath), "{} file not found".format(factor_filepath)
+        total_factors = np.load(factor_filepath, mmap_mode='r+')
+        for dataset_name in self.list_dataset_names[1:]:
+            # Assert if factor file exists
+            factor_filepath = os.path.join(self.path, dataset_name + "_" + factor_name + ".npy")
+            assert os.path.exists(factor_filepath), "{} file not found".format(factor_filepath)
+            # Load factor file
+            factors = np.load(factor_filepath, mmap_mode='r+')
+            # Select data based on maximum data per dataset selected
+            factors = self.select_data(factors)
+            # Concatenate factors
+            total_factors = np.concatenate([total_factors, factors], axis=0)
+        return total_factors
+
+    def select_data(self, data):
+        if self.max_data_per_dataset > 0:
+            num_selected_data = np.min([self.max_data_per_dataset, len(data)])
+            if self.max_data_per_dataset > len(data):
+                print(f"Warning: max_data_per_dataset is larger than the number of data")
+            data = data[:num_selected_data]
+        return data
 
     def __getitem__(self, index):
         if self.greyscale:
@@ -48,8 +59,10 @@ class EquivDataset(torch.utils.data.Dataset):
         else:
             return torch.FloatTensor(self.data[index, 0]), torch.FloatTensor(self.data[index, 1]), torch.FloatTensor(
                 (self.lbls[index],))
+
     def __len__(self):
         return len(self.data)
+
     @staticmethod
     def angles2so3(angles):
         """
@@ -58,7 +71,7 @@ class EquivDataset(torch.utils.data.Dataset):
         :return: rotation matrix
         """
         # Initialize rotation matrix
-        rotation_matrix = np.zeros((angles.shape[0], 3, 3), dtype = angles.dtype)
+        rotation_matrix = np.zeros((angles.shape[0], 3, 3), dtype=angles.dtype)
         # Fill out matrix entries
         cos_angle = np.cos(angles)
         sin_angle = np.sin(angles)
@@ -105,29 +118,10 @@ class EquivDatasetStabs(EquivDataset):
     stabilizers corresponding to the image pair.
     """
 
-    def __init__(self, path: str, list_dataset_names: List[str] = ["equiv"], greyscale: bool = False,
+    def __init__(self, path: str, list_dataset_names: List[str], greyscale: bool = False,
                  max_data_per_dataset: int = -1, so3_matrices: bool = False):
         super().__init__(path, list_dataset_names, greyscale, max_data_per_dataset, so3_matrices)
-        for dataset_name in list_dataset_names:
-            assert os.path.exists(
-                path + dataset_name + '_stabilizers.npy'), f"{dataset_name}_stabilizers.npy cardinality file not found"
-        stabs = np.load(path + list_dataset_names[0] + '_stabilizers.npy', mmap_mode='r+')
-        if max_data_per_dataset > 0:
-            num_selected_data = np.min([max_data_per_dataset, len(stabs)])
-            if max_data_per_dataset > len(stabs):
-                print(
-                    f"Warning: max_data_per_dataset is larger than the number of data in the dataset {list_dataset_names[0]}")
-            stabs = stabs[:num_selected_data]
-        self.stabs = stabs
-        for dataset_name in list_dataset_names[1:]:
-            stabs = np.load(path + dataset_name + '_stabilizers.npy', mmap_mode='r+')
-            if max_data_per_dataset > 0:
-                num_selected_data = np.min([max_data_per_dataset, len(stabs)])
-                if max_data_per_dataset > len(stabs):
-                    print(
-                        f"Warning: max_data_per_dataset is larger than the number of data in the dataset {dataset_name}")
-                stabs = stabs[:num_selected_data]
-            self.stabs = np.concatenate([self.stabs, stabs], axis=0)
+        self.stabs = self.load_data("stabilizers")
 
     def __getitem__(self, index):
         if self.greyscale:
@@ -140,6 +134,28 @@ class EquivDatasetStabs(EquivDataset):
                 self.stabs[index],))
 
 
+class FactorDataset(EquivDatasetStabs):
+    def __init__(self, path: str, list_dataset_names: List[str], greyscale: bool = False,
+                 max_data_per_dataset: int = -1, so3_matrices: bool = False, factor_list: List[str] = None):
+        super().__init__(path, list_dataset_names, greyscale, max_data_per_dataset, so3_matrices)
+        self.factors = []
+        for factor_name in factor_list:
+            self.factors.append(self.load_data(factor_name))
+
+    def __getitem__(self, index):
+        output_factors = [torch.FloatTensor((factors[index],)) for factors in self.factors]
+        if self.greyscale:
+            return [torch.FloatTensor(self.data[index, 0]).unsqueeze(0),
+                    torch.FloatTensor(self.data[index, 1]).unsqueeze(0),
+                    torch.FloatTensor((self.lbls[index],)),
+                    torch.FloatTensor((self.stabs[index],)),
+                    *output_factors]
+        else:
+            return [torch.FloatTensor(self.data[index, 0]),
+                    torch.FloatTensor(self.data[index, 1]),
+                    torch.FloatTensor((self.lbls[index],)),
+                    torch.FloatTensor((self.stabs[index],)),
+                    *output_factors]
 
 
 class EvalDataset(torch.utils.data.Dataset):
