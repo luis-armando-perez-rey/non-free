@@ -203,7 +203,7 @@ def apply_inverse_rotation(z, angles):
     """
     Applies the inverse rotation to the latent z
     :param z: latent with shape (n_objects, n_angles, num_gaussians, z_dim)
-    :param angles: angles with shape (n_objects, n_angles)
+    :param angles: angles with shape (n_objects, n_angles, n_subspaces)
     :return:
     """
     # Inverse rotation for torus manifold
@@ -246,6 +246,12 @@ def estimate_mean_inv(z_inv):
 
 
 def estimate_kmeans_inv(z_inv, stabilizers):
+    """
+    Estimates the kmeans for the inverse latent
+    :param z_inv:
+    :param stabilizers: number of clusters based on the stabilizers
+    :return:
+    """
     latent_dim = z_inv.shape[-1]
     n_gaussians = z_inv.shape[-2]
     if latent_dim == 4:
@@ -259,6 +265,7 @@ def estimate_kmeans_inv(z_inv, stabilizers):
 
     elif latent_dim == 2:
         z_inv_mean = []
+        print("Stabilizers", stabilizers)
         obj_stabilizers = np.amin([stabilizers, n_gaussians])
         print("Number of object stabilizers ", obj_stabilizers)
         kmeans = KMeans(obj_stabilizers).fit(z_inv.reshape((-1, z_inv.shape[-1])))
@@ -308,23 +315,27 @@ def dlsbd_metric_mixture(z, angles, stabilizers, average: bool = True, distance_
     :param z: embeddings in Z_G
     :param angles: angles used to generate the dataset where embeddings are extracted from
     :param stabilizers: number of stabilizers for each object and subspace. Has shape (num_objects, num_subspaces)
+    :param distance_function: distance function to use for calculating the dispersion
     :return:
     """
     num_gaussians = z.shape[-2]
     num_subspaces = z.shape[-1] // 2
+    print("Number of mixture components", num_gaussians)
+    print("Number of subspaces", num_subspaces)
     angles = repeat_angles_n_gaussians(angles, num_gaussians)
     z_inv = apply_inverse_rotation(z, angles)
+    print("Inverse rotation shape", z_inv.shape)
     dispersion_values = []
     for num_object in range(z_inv.shape[0]):
         z_inv_object = z_inv[num_object]
         # z_inv_mean = estimate_mean_inv(z_inv_object)
-        z_inv_mean = estimate_kmeans_inv(z_inv_object, stabilizers[num_object])
+        z_inv_mean = estimate_kmeans_inv(z_inv_object, stabilizers[num_object, 0])
         # print(f"Stabilizers of num object {num_object}", stabilizers[num_object])
         for num_subspace in range(num_subspaces):
             # print("Number of subspace", num_subspace)
             z_inv_object_subspace = z_inv_object[..., num_subspace * 2:(num_subspace + 1) * 2]
             z_inv_mean_subspace = np.expand_dims(z_inv_mean[num_subspace], axis=0)
-            # print("ZINV MEAN SUBSPACE", z_inv_mean_subspace.shape, z_inv_object_subspace.shape)
+            print("ZINV MEAN SUBSPACE", z_inv_mean_subspace.shape, z_inv_object_subspace.shape)
             dispersion_obj = calculate_dispersion(z_inv_object_subspace,
                                                   z_inv_mean_subspace,
                                                   distance_function=distance_function)
