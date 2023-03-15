@@ -57,4 +57,7 @@ def get_args():
     # Plotting
     parser.add_argument("--plot", default=0, type=int, help="Number of epochs to ")
 
+    # Neptune
+    parser.add_argument("--neptunetags", nargs="+", default=[], type=str, help="Tags to use for neptune")
+
     return parser
