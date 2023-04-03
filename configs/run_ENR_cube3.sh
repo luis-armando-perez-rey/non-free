@@ -14,8 +14,8 @@ seed=0
 neptune_user="laprhanabi"
 seeds=(17 42 58 28 19)
 ndatapairs=7500
-gpu=0
-latent_dim=16
+gpu=3
+latent_dim=4
 
 for seed in "${seeds[@]}"
 do

@@ -10,14 +10,13 @@ dataset_names=("tetrahedron cube icosahedron" "tetrahedron cube icosahedron" "te
 ndatapairs_list=(-1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1)
 #N_list=(1 12 24 60 80 1 12 24 60 80 1 12 24 60 80 1 12 24 60 80 1 12 24 60 80)
 N_list=(1 1 1 1 1 24 24 24 24 24 60 60 60 60 60 80 80 80 80 80)
-N_list=(60 60 60 60 60)
+N_list=(12 12 12 12 12)
 #N_list=(60)
 dataset="symmetric_solids"
 extra_dim=10
 epochs=100
 weightequivariance=1
 seeds=(17 28 19 42 58 17 28 19 42 58 17 28 19 42 58 17 28 19 42 58 17 28 19 42 58)
-seeds=(17 28 19 42 58)
 #seeds=(17)
 gpu=0
 
@@ -36,14 +35,14 @@ enc_dist="None"
 
 
 # Fixed parameters
-chamfer_reg=5.0
+chamfer_reg=10.0
 prior_dist="None"
 reconstruction_loss="bernoulli"
 decoder="resnet"
 save_interval=1
 identity_loss="infonce"
 neptune_user="laprhanabi"
-experiment_id="long5"
+experiment_id="long10"
 
 for num_dataset in "${!dataset_names[@]}"
 do

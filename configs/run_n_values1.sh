@@ -13,12 +13,11 @@ extra_dim=0
 epochs=50
 weightequivariance=1
 seeds=(17 17 17 17 17 17 17 17 17 17 42 42 42 42 42 42 42 42 42 42 28 28 28 28 28 28 28 28 28 28 19 19 19 19 19 19 19 19 19 19 58 58 58 58 58 58 58 58 58 58)
-gpu=2
+gpu=3
 
 
 
 
-# Semi-fixed parameters
 equiv_loss="chamfer"
 batch_size=100
 latent_dim=2
@@ -30,7 +29,7 @@ enc_dist="gaussian-mixture"
 
 
 # Fixed parameters
-chamfer_reg=1.0
+chamfer_reg=1
 prior_dist="gaussian-mixture"
 reconstruction_loss="bernoulli"
 decoder="resnet"

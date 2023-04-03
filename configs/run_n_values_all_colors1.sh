@@ -6,19 +6,19 @@ source activate gpytorch
 # Non-fixed parameters
 dataset_names=("1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c")
 #dataset_names=("stool_0 chair_0 airplane_0" )
-dataset_names=("1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c")
+dataset_names=("1_c 2_c 3_c 4_c 5_c" "1_c 2_c 3_c 4_c 5_c"  "1_c 2_c 3_c 4_c 5_c"  "1_c 2_c 3_c 4_c 5_c"  "1_c 2_c 3_c 4_c 5_c"  "1_c 2_c 3_c 4_c 5_c"  "1_c 2_c 3_c 4_c 5_c"  "1_c 2_c 3_c 4_c 5_c"  "1_c 2_c 3_c 4_c 5_c"  "1_c 2_c 3_c 4_c 5_c" )
 
 ndatapairs_list=(-1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1)
 #ndatapairs_list=(2500)
 #ndatapairs_list=(5000 5000 5000 5000 5000)
-N_list=(5 5 5 5 5)
+N_list=(1 1 1 1 1 10 10 10 10 10)
 #N_list=(10 10 10 10 10)
 dataset="arrows"
 extra_dim=3
 epochs=150
 weightequivariance=1
 seeds=(17 17 17 17 17 17 17 17 17 17 42 42 42 42 42 42 42 42 42 42 28 28 28 28 28 28 28 28 28 28 19 19 19 19 19 19 19 19 19 19 58 58 58 58 58 58 58 58 58 58)
-seeds=(17 42 28 19 58)
+seeds=(17 42 28 19 58 17 42 28 19 58)
 gpu=1
 
 

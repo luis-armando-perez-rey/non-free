@@ -1,8 +1,8 @@
 #!/bin/bash
 # source /home/TUE/s161416/miniconda3/etc/profile.d/conda.sh
 # source activate gpytorch
-dataset_name="airplane_0 stool_0 chair_0 lamp_0 bathtub_0"
-dataset="modelnet"
+dataset_name="1 2 3 4 5"
+dataset="arrows"
 reconstruction_loss="bernoulli"
 experiment_id="enr"
 epochs=100
@@ -13,8 +13,8 @@ batch_size=20
 neptune_user="laprhanabi"
 seeds=(17 42 58 28 19)
 ndatapairs=-1
-gpu=0
-latent_dim=4
+gpu=3
+latent_dim=8
 seeds=(17 42 58 28 19)
 
 for seed in "${!seeds[@]}"
