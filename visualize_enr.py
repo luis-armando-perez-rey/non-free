@@ -112,130 +112,6 @@ action = action.detach().cpu().numpy()
 print("MEAN SHAPE!!!", mean_numpy.shape, np.unique(mean_numpy))
 # endregion
 
-# region PLOT ROTATED EMBEDDINGS
-flat_mean = mean_numpy.reshape(mean_numpy.shape[0], -1)
-flat_mean_next = mean_next.reshape(mean_next.shape[0], -1)
-flat_mean_rot = mean_rot.reshape(mean_rot.shape[0], -1)
-# Get PCA model projection
-n_data = flat_mean.shape[0]
-pca_model = get_pca_model(flat_mean)
-normalizing_constant = get_normalizing_constant(pca_model, n_data)
-
-projected_mean = np.expand_dims(pca_model.transform(flat_mean) / normalizing_constant, axis=1)
-projected_mean_next = np.expand_dims(pca_model.transform(flat_mean_next) / normalizing_constant, axis=1)
-projected_mean_rot = np.expand_dims(pca_model.transform(flat_mean_rot) / normalizing_constant, axis=1)
-
-# logvar_eval = -4.6 * np.ones_like(projected_mean)
-std_next = np.ones_like(projected_mean) * 0.1
-std = std_next
-for i in range(5):
-    print(f"Plotting example {i}")
-    fig, axes = plot_images_distributions(mean=projected_mean[i], std=std[i], mean_next=projected_mean_next[i],
-                                          std_next=std_next[i],
-                                          image=npimages[i], image_next=npimages_next[i],
-                                          expected_mean=projected_mean_rot[i], n=1, set_limits=True)
-    if run is not None:
-        run[f"image_distribution {i}"].upload(plt.gcf())
-    plt.savefig(os.path.join(save_folder, f"image_pair_{i}.png"), bbox_inches='tight')
-
-    plot_mixture_neurreps(mean_numpy[i])
-    plt.savefig(os.path.join(save_folder, f"test_mixture_{i}.png"), bbox_inches='tight')
-    add_image_to_ax(npimages[i])
-
-    plt.savefig(os.path.join(save_folder, f"test_image_{i}.png"), bbox_inches='tight')
-
-
-print("Dataset", args.dataset)
-orbitnum = 0
-if args.dataset != "symmetric_solids" and args.dataset != "modelnetso3":
-    print(len(eval_dset.data[orbitnum]))
-    eval_indices = np.arange(0, len(eval_dset.data[orbitnum]), 1)
-    eval_mean = model.encode(torch.tensor(eval_dset.data[orbitnum][eval_indices], dtype=img.dtype).to(device))
-    projected_eval = np.expand_dims(
-        pca_model.transform(eval_mean.reshape(eval_mean.shape[0], -1).detach().cpu().numpy()) / normalizing_constant,
-        axis=1)
-    std_eval = np.ones_like(projected_eval) * 0.1
-    print("Projected eval shape", projected_eval.shape, "Std eval shape", std_eval.shape)
-    figures = save_embeddings_on_circle(projected_eval, std_eval, eval_dset.flat_stabs[eval_indices], save_folder,
-                                        args.dataset_name[
-                                            orbitnum], increasing_radius=True)
-    if run is not None:
-        print(figures)
-        run["embeddings_on_circle"].upload(figures[0])
-else:
-    eval_indices = np.arange(0, len(eval_dset.flat_images), len(eval_dset.flat_images) // 36)
-    eval_mean = model.encode(torch.tensor(eval_dset.flat_images[eval_indices], dtype=img.dtype).to(device))
-
-# endregion
-
-if args.dataset != "symmetric_solids":
-
-    # region GET EMBEDDINGS DLSBD
-    flat_images_tensor = torch.Tensor(eval_dset.flat_images).to(device)  # transform to torch tensor
-    eval_tensor_dset = torch.utils.data.TensorDataset(flat_images_tensor)  # create your datset
-    eval_dataloader = torch.utils.data.DataLoader(eval_tensor_dset, batch_size=args.batch_size)
-    mean_dlsbd = []
-    for num_batch, batch in enumerate(eval_dataloader):
-        print("Encoding batch", num_batch)
-        mean_eval_ = model.encode(batch[0])
-        mean_dlsbd.append(mean_eval_)
-    mean_dlsbd = torch.cat(mean_dlsbd, dim=0)
-    # endregion
-
-    # region ESTIMATE DLSBD METRIC
-    print("Mean dlsbd shape", mean_dlsbd.shape)
-    reshaped_mean_eval = mean_dlsbd.reshape((eval_dset.num_objects, -1, np.prod(list(mean_dlsbd.shape[-4:])))).detach().cpu().numpy()
-    print("Reshaped mean eval shape", reshaped_mean_eval.shape)
-    n_subgroups = 1
-    k_values = create_combinations_omega_values_range(-10, 10, n_subgroups)
-    dlsbd_values = []
-    for reshaped_mean in reshaped_mean_eval:
-        object_mean = np.expand_dims(reshaped_mean, axis=0)
-        dlsbd_values.append(dlsbd(object_mean, k_values, be_verbose=1, factor_manifold="cylinder")[0])
-    dlsbd_metric = np.mean(dlsbd_values)
-    print("DLSBD values", dlsbd_values)
-    print("DLSBD", dlsbd_metric)
-    model_path = os.path.join(args.checkpoints_dir, args.model_name)
-    np.save(f'{model_path}/dlsbd.npy', dlsbd_metric)
-    if run is not None:
-        run["metrics/dlsbd"].log(dlsbd_metric)
-    # endregion
-
-# region PLOT UNIQUE
-# Select an image from each of the unique stabilizer objects
-print("Shape of eval data", eval_dset.data.shape, eval_dset.flat_images.shape, eval_mean.shape)
-# region PLOT RECONSTRUCTIONS
-x_rec = model.decode(eval_mean)
-x_rec = x_rec.permute((0, 2, 3, 1)).detach().cpu().numpy()
-
-# Plot the reconstructions in rows of 10
-num_images = 10
-fig, axes = plt.subplots(3, num_images, figsize=(20, 4))
-i = 0
-axes[0, 0].set_ylabel("Original")
-axes[1, 0].set_ylabel("Reconstruction")
-axes[2, 0].set_ylabel("Filter 1")
-
-
-indexes = np.arange(0, len(eval_dset.data[orbitnum]), len(eval_dset.data[orbitnum])//num_images)
-for j in indexes:
-    axes[0, j].imshow(np.moveaxis(eval_dset.data[orbitnum][j], 0, -1))
-    axes[1, j].imshow(x_rec[i + j])
-    axes[0, j].set_xticks([])
-    axes[0, j].set_yticks([])
-    axes[1, j].set_xticks([])
-    axes[1, j].set_yticks([])
-    projected_top = np.mean(np.abs(eval_mean[j, 0].detach().numpy()), keepdims=True, axis=-1)
-    projected_top = np.clip(projected_top[:, :, 0], 0, np.amax(projected_top))
-    axes[2, j].imshow(projected_top, cmap="Reds")
-    axes[2, j].set_xticks([])
-    axes[2, j].set_yticks([])
-if run is not None:
-    run[f"reconstructions"].upload(plt.gcf())
-plt.close("all")
-# endregion
-
-
 # region CALCULATE HITRATE
 # Setup torch dataset use separate data as validation
 if (args.dataset != "symmetric_solids") and (args.dataset != "modelnetso3"):
@@ -269,6 +145,160 @@ if run is not None:
 # endregion
 
 
+# region PLOT ROTATED EMBEDDINGS
+flat_mean = mean_numpy.reshape(mean_numpy.shape[0], -1)
+flat_mean_next = mean_next.reshape(mean_next.shape[0], -1)
+flat_mean_rot = mean_rot.reshape(mean_rot.shape[0], -1)
+# Get PCA model projection
+n_data = flat_mean.shape[0]
+pca_model = get_pca_model(flat_mean)
+normalizing_constant = get_normalizing_constant(pca_model, n_data)
+
+projected_mean = np.expand_dims(pca_model.transform(flat_mean) / normalizing_constant, axis=1)
+projected_mean_next = np.expand_dims(pca_model.transform(flat_mean_next) / normalizing_constant, axis=1)
+projected_mean_rot = np.expand_dims(pca_model.transform(flat_mean_rot) / normalizing_constant, axis=1)
+
+# logvar_eval = -4.6 * np.ones_like(projected_mean)
+std_next = np.ones_like(projected_mean) * 0.1
+std = std_next
+for i in range(5):
+    print(f"Plotting example {i}")
+    fig, axes = plot_images_distributions(mean=projected_mean[i], std=std[i], mean_next=projected_mean_next[i],
+                                          std_next=std_next[i],
+                                          image=npimages[i], image_next=npimages_next[i],
+                                          expected_mean=projected_mean_rot[i], n=1, set_limits=True)
+    if run is not None:
+        run[f"image_distribution {i}"].upload(plt.gcf())
+    plt.savefig(os.path.join(save_folder, f"image_pair_{i}.png"), bbox_inches='tight')
+
+    plot_mixture_neurreps(mean_numpy[i])
+    plt.savefig(os.path.join(save_folder, f"test_mixture_{i}.png"), bbox_inches='tight')
+    add_image_to_ax(npimages[i])
+
+    plt.savefig(os.path.join(save_folder, f"test_image_{i}.png"), bbox_inches='tight')
+
+print("Dataset", args.dataset)
+orbitnum = 0
+if args.dataset != "symmetric_solids" and args.dataset != "modelnetso3":
+    print(len(eval_dset.data[orbitnum]))
+    eval_mean = model.encode(torch.tensor(eval_dset.flat_images, dtype=img.dtype).to(device))
+    projected_eval = np.expand_dims(
+        pca_model.transform(eval_mean.reshape(eval_mean.shape[0], -1).detach().cpu().numpy()) / normalizing_constant,
+        axis=1)
+    std_eval = np.ones_like(projected_eval) * 0.1
+    print("Projected eval shape", projected_eval.shape, "Std eval shape", std_eval.shape)
+    figures = save_embeddings_on_circle(projected_eval, std_eval, eval_dset.flat_stabs, save_folder,
+                                        args.dataset_name[
+                                            orbitnum], increasing_radius=True)
+    if run is not None:
+        print(figures)
+        run["embeddings_on_circle"].upload(figures[0])
+else:
+    eval_indices = np.arange(0, len(eval_dset.flat_images), len(eval_dset.flat_images) // 36)
+    eval_mean = model.encode(torch.tensor(eval_dset.flat_images[eval_indices], dtype=img.dtype).to(device))
+
+# endregion
+
+
+if args.dataset != "symmetric_solids":
+
+    # region GET EMBEDDINGS DLSBD
+    flat_images_tensor = torch.Tensor(eval_dset.flat_images).to(device)  # transform to torch tensor
+    eval_tensor_dset = torch.utils.data.TensorDataset(flat_images_tensor)  # create your datset
+    eval_dataloader = torch.utils.data.DataLoader(eval_tensor_dset, batch_size=args.batch_size)
+    mean_dlsbd = []
+    for num_batch, batch in enumerate(eval_dataloader):
+        print("Encoding batch", num_batch)
+        mean_eval_ = model.encode(batch[0])
+        mean_dlsbd.append(mean_eval_)
+    mean_dlsbd = torch.cat(mean_dlsbd, dim=0)
+    # endregion
+
+    # region ESTIMATE DLSBD METRIC
+    print("Mean dlsbd shape", mean_dlsbd.shape)
+    reshaped_mean_eval = mean_dlsbd.reshape(
+        (eval_dset.num_objects, -1, np.prod(list(mean_dlsbd.shape[-4:])))).detach().cpu().numpy()
+    print("Reshaped mean eval shape", reshaped_mean_eval.shape)
+    n_subgroups = 1
+    k_values = create_combinations_omega_values_range(-10, 10, n_subgroups)
+    dlsbd_values = []
+    for reshaped_mean in reshaped_mean_eval:
+        object_mean = np.expand_dims(reshaped_mean, axis=0)
+        dlsbd_values.append(dlsbd(object_mean, k_values, be_verbose=1, factor_manifold="cylinder")[0])
+    dlsbd_metric = np.mean(dlsbd_values)
+    print("DLSBD values", dlsbd_values)
+    print("DLSBD", dlsbd_metric)
+    model_path = os.path.join(args.checkpoints_dir, args.model_name)
+    np.save(f'{model_path}/dlsbd.npy', dlsbd_metric)
+    if run is not None:
+        run["metrics/dlsbd"].log(dlsbd_metric)
+    # endregion
+
+# region PLOT UNIQUE IMAGES
+    unique_images = []
+    for unique in np.unique(dset.stabs):
+        unique_images.append(dset.data[dset.stabs == unique][0][0])
+
+    unique_images = torch.tensor(np.array(unique_images), dtype=img.dtype).to(device)
+    unique_embeddings = model.encode(torch.tensor(unique_images, dtype=img.dtype).to(device))
+
+
+    x_rec = model.decode(unique_embeddings)
+    x_rec = x_rec.permute((0, 2, 3, 1)).detach().cpu().numpy()
+    for i in range(len(x_rec)):
+        add_image_to_ax(1 / (1 + np.exp(-x_rec[i])))
+        plt.savefig(os.path.join(save_folder, f"reconstruction_{i}.png"), bbox_inches='tight')
+        add_image_to_ax(unique_images[i].permute((1, 2, 0)).detach().cpu().numpy())
+        plt.savefig(os.path.join(save_folder, f"input_image_{i}.png"), bbox_inches='tight')
+        if run is not None:
+            run[f"reconstruction_image_{i}"].upload(plt.gcf())
+# endregion
+
+
+
+
+# region RECONSTRUCTIONS EMBEDDINGS ORIGINAL
+
+# Select an image from each of the unique stabilizer objects
+print("Shape of eval data", eval_dset.data.shape, eval_dset.flat_images.shape, eval_mean.shape)
+x_rec = model.decode(eval_mean)
+x_rec = x_rec.detach().cpu().numpy()
+# Plot the reconstructions in rows of 10
+num_images = 10
+
+num_orbits = len(eval_dset.data)
+num_views = len(eval_dset.data[orbitnum])
+x_rec = x_rec.reshape((num_orbits, num_views, *eval_dset.data.shape[-3:]))
+x_rec = np.moveaxis(x_rec, 2, -1)
+eval_mean_reshaped = eval_mean.reshape((num_orbits, num_views, eval_mean.shape[-3], eval_mean.shape[-2], eval_mean.shape[-1]))
+print("Eval mean reshaped shape", eval_mean_reshaped.shape, x_rec.shape)
+fig, axes = plt.subplots(3, num_views, figsize=(20, 4))
+i = 0
+axes[0, 0].set_ylabel("Original")
+axes[1, 0].set_ylabel("Reconstruction")
+axes[2, 0].set_ylabel("Filter 1")
+indexes = np.arange(0, num_views)
+for j in indexes:
+    axes[0, j].imshow(np.moveaxis(eval_dset.data[orbitnum][j], 0, -1))
+    axes[1, j].imshow(1 / (1 + np.exp(-x_rec[orbitnum][j])))
+    axes[0, j].set_xticks([])
+    axes[0, j].set_yticks([])
+    axes[1, j].set_xticks([])
+    axes[1, j].set_yticks([])
+    projected_top = np.mean(np.abs(eval_mean[j, 0].detach().numpy()), keepdims=True, axis=-1)
+    projected_top = np.clip(projected_top[:, :, 0], 0, np.amax(projected_top))
+    axes[2, j].imshow(projected_top, cmap="Reds")
+    axes[2, j].set_xticks([])
+    axes[2, j].set_yticks([])
+if run is not None:
+    run[f"reconstructions"].upload(plt.gcf())
+plt.close("all")
+# endregion
+
+
+
+
+
 # region PLOT VOXELS
 fig = plt.figure(figsize=(10, 10))
 
@@ -279,7 +309,7 @@ for i in range(num_filters):
     ax = fig.add_subplot(6, 6, i + 1)
     projected_top = np.mean(np.abs(mean_numpy[0, i]), keepdims=True, axis=-1)
     projected_top = np.clip(projected_top, 0, np.amax(projected_top))
-    ax.imshow(projected_top[...,-1], cmap="Reds")
+    ax.imshow(projected_top[..., -1], cmap="Reds")
     ax.set_xticks([])
     ax.set_yticks([])
 if run is not None:
@@ -294,7 +324,7 @@ colors[..., 2] = np.zeros_like(mean_numpy[0, 0])
 for i in range(num_filters):
     ax = fig.add_subplot(6, 6, i + 1, projection='3d')
     voxelarray = mean_numpy[0, i] > 0
-    colors[..., 3] = mean_numpy[0, i] / (np.amax(mean_numpy[0, i])+1e-5)
+    colors[..., 3] = mean_numpy[0, i] / (np.amax(mean_numpy[0, i]) + 1e-5)
     ax.voxels(voxelarray, facecolors=colors)
     ax.set_xticks([])
     ax.set_yticks([])
@@ -305,7 +335,7 @@ if run is not None:
 for i in range(num_filters):
     ax = fig.add_subplot(6, 6, i + 1, projection='3d')
     voxelarray = mean_numpy[0, i] < 0
-    colors[..., 3] = -mean_numpy[0, i] / (np.amax(mean_numpy[0, i])+1e-5)
+    colors[..., 3] = -mean_numpy[0, i] / (np.amax(mean_numpy[0, i]) + 1e-5)
     ax.voxels(voxelarray, facecolors=colors)
     ax.set_xticks([])
     ax.set_yticks([])
@@ -314,9 +344,6 @@ if run is not None:
     run[f"voxel_filter_negative"].upload(plt.gcf())
 
 # endregion
-
-
-
 
 
 #     # TODO Fix latent traversal

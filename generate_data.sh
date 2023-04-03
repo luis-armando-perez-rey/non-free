@@ -8,16 +8,6 @@
 #python3 generate_data.py --n_examples 10000 --dataset_name 5 --n_arrows 5 --dataset sinusoidal
 #python3 generate_data.py --n_examples 10000 --dataset_name 7 --n_arrows 7 --dataset sinusoidal
 ## Arrows data generation
-#python3 generate_data.py --n_examples 10000 --dataset_name 1 --n_arrows 1 --dataset rot-arrows
-#python3 generate_data.py --n_examples 10000 --dataset_name 2 --n_arrows 2 --dataset rot-arrows
-#python3 generate_data.py --n_examples 10000 --dataset_name 3 --n_arrows 3 --dataset rot-arrows
-#python3 generate_data.py --n_examples 5000 --dataset_name 5 --n_arrows 5 --dataset arrows
-#python3 generate_data.py --n_examples 5000 --dataset_name 4 --n_arrows 4 --dataset arrows
-#python3 generate_data.py --n_examples 5000 --dataset_name 5 --n_arrows 5 --dataset arrows
-#python3 generate_data.py --n_examples 5000 --dataset_name 6 --n_arrows 6 --dataset arrows
-#python generate_data.py --n_examples 4500 --dataset_name 4 --n_arrows 4 --dataset arrows
-#python generate_data.py --n_examples 4500 --dataset_name 5 --n_arrows 5 --dataset arrows
-
 #python generate_data.py --n_examples 5000 --dataset_name 1 --n_arrows 1 --dataset arrows
 #python generate_data.py --n_examples 5000 --dataset_name 2 --n_arrows 2 --dataset arrows
 #python generate_data.py --n_examples 5000 --dataset_name 3 --n_arrows 3 --dataset arrows
@@ -40,20 +30,20 @@
 
 
 # Modelnet
-python3 generate_data.py --n_examples 2500 --dataset_name airplane_0 --dataset modelnet
-python3 generate_data.py --n_examples 250 --dataset_name airplane_0_val --dataset modelnet
-python3 generate_data.py --n_examples 2500 --dataset_name bathtub_0 --dataset modelnet
-python3 generate_data.py --n_examples 250 --dataset_name bathtub_0_val --dataset modelnet
-python3 generate_data.py --n_examples 2500 --dataset_name stool_0 --dataset modelnet
-python3 generate_data.py --n_examples 250 --dataset_name stool_0_val --dataset modelnet
-python3 generate_data.py --n_examples 2500 --dataset_name bottle_0 --dataset modelnet
-python3 generate_data.py --n_examples 250 --dataset_name bottle_0_val --dataset modelnet
-python3 generate_data.py --n_examples 2500 --dataset_name chair_0 --dataset modelnet
-python3 generate_data.py --n_examples 250 --dataset_name chair_0_val --dataset modelnet
-python3 generate_data.py --n_examples 2500 --dataset_name lamp_0 --dataset modelnet
-python3 generate_data.py --n_examples 250 --dataset_name lamp_0_val --dataset modelnet
-python3 generate_data.py --n_examples 2500 --dataset_name bookshelf_0 --dataset modelnet
-python3 generate_data.py --n_examples 250 --dataset_name bookshelf_0_val --dataset modelnet
+#python3 generate_data.py --n_examples 2500 --dataset_name airplane_0 --dataset modelnet
+#python3 generate_data.py --n_examples 250 --dataset_name airplane_0_val --dataset modelnet
+#python3 generate_data.py --n_examples 2500 --dataset_name bathtub_0 --dataset modelnet
+#python3 generate_data.py --n_examples 250 --dataset_name bathtub_0_val --dataset modelnet
+#python3 generate_data.py --n_examples 2500 --dataset_name stool_0 --dataset modelnet
+#python3 generate_data.py --n_examples 250 --dataset_name stool_0_val --dataset modelnet
+#python3 generate_data.py --n_examples 2500 --dataset_name bottle_0 --dataset modelnet
+#python3 generate_data.py --n_examples 250 --dataset_name bottle_0_val --dataset modelnet
+#python3 generate_data.py --n_examples 2500 --dataset_name chair_0 --dataset modelnet
+#python3 generate_data.py --n_examples 250 --dataset_name chair_0_val --dataset modelnet
+#python3 generate_data.py --n_examples 2500 --dataset_name lamp_0 --dataset modelnet
+#python3 generate_data.py --n_examples 250 --dataset_name lamp_0_val --dataset modelnet
+#python3 generate_data.py --n_examples 2500 --dataset_name bookshelf_0 --dataset modelnet
+#python3 generate_data.py --n_examples 250 --dataset_name bookshelf_0_val --dataset modelnet
 
 
 
@@ -65,13 +55,16 @@ python3 generate_data.py --n_examples 250 --dataset_name bookshelf_0_val --datas
 #python3 generate_data.py --n_examples 250 --dataset_name bottle_0_val --dataset modelnet
 #python3 generate_data.py --n_examples 2500 --dataset_name chair_0 --dataset modelnet
 #python3 generate_data.py --n_examples 250 --dataset_name chair_0_val --dataset modelnet
+#python3 generate_data.py --n_examples 2500 --dataset_name stool_0 --dataset modelnet
+#python3 generate_data.py --n_examples 250 --dataset_name stool_0_val --dataset modelnet
+#python3 generate_data.py --n_examples 2500 --dataset_name chair_0 --dataset modelnet
+#python3 generate_data.py --n_examples 250 --dataset_name chair_0_val --dataset modelnet
+#python3 generate_data.py --n_examples 2500 --dataset_name lamp_0 --dataset modelnet
+#python3 generate_data.py --n_examples 250 --dataset_name lamp_0_val --dataset modelnet
+#python3 generate_data.py --n_examples 2500 --dataset_name bathtub_0 --dataset modelnet
+#python3 generate_data.py --n_examples 250 --dataset_name bathtub_0_val --dataset modelnet
+#
 
-
-#python3 generate_data.py --n_examples 1000 --dataset_name stool_0 --dataset modelnet
-#python3 generate_data.py --n_examples 2000 --dataset_name bookshelf_0 --dataset modelnet
-#python3 generate_data.py --n_examples 2000 --dataset_name bottle_0 --dataset modelnet
-#python3 generate_data.py --n_examples 2000 --dataset_name stool_2 --dataset modelnet
-#python3 generate_data.py --n_examples 1000 --dataset_name stool_1 --dataset modelnet
 
 #python3 generate_data.py --n_examples 10000 --n_arrows 5 --dataset_name marked_tetrahedron --dataset symmetric_solids
 #python3 generate_data.py --n_examples 10000 --n_arrows 0 --dataset_name tetrahedron --dataset symmetric_solids
@@ -118,13 +111,13 @@ python3 generate_data.py --n_examples 250 --dataset_name bookshelf_0_val --datas
 #python3 generate_data.py --n_examples 0 --dataset_name airplane_0-chair_0 --n_arrows 1 --dataset modelnet_quessard
 
 # Symmetric solids
-#python3 generate_data.py --n_examples 7500 --n_arrows 0 --dataset_name tetrahedron --dataset symmetric_solids
-#python3 generate_data.py --n_examples 750 --n_arrows 0 --dataset_name tetrahedron_val --dataset symmetric_solids
-#python3 generate_data.py --n_examples 7500 --n_arrows 1 --dataset_name cube --dataset symmetric_solids
-#python3 generate_data.py --n_examples 750 --n_arrows 1 --dataset_name cube_val --dataset symmetric_solids
-#
-#python3 generate_data.py --n_examples 7500 --n_arrows 2 --dataset_name icosahedron --dataset symmetric_solids
-#python3 generate_data.py --n_examples 750 --n_arrows 2 --dataset_name icosahedron_val --dataset symmetric_solids
+python3 generate_data.py --n_examples 7500 --n_arrows 0 --dataset_name tetrahedron --dataset symmetric_solids
+python3 generate_data.py --n_examples 750 --n_arrows 0 --dataset_name tetrahedron_val --dataset symmetric_solids
+python3 generate_data.py --n_examples 7500 --n_arrows 1 --dataset_name cube --dataset symmetric_solids
+python3 generate_data.py --n_examples 750 --n_arrows 1 --dataset_name cube_val --dataset symmetric_solids
+
+python3 generate_data.py --n_examples 7500 --n_arrows 2 --dataset_name icosahedron --dataset symmetric_solids
+python3 generate_data.py --n_examples 750 --n_arrows 2 --dataset_name icosahedron_val --dataset symmetric_solids
 
 #python3 generate_data.py --n_examples 7500 --n_arrows 5 --dataset_name marked_tetrahedron --dataset symmetric_solids
 #python3 generate_data.py --n_examples 750 --n_arrows 5 --dataset_name marked_tetrahedron_val --dataset symmetric_solids

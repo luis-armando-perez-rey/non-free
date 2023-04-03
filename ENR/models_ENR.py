@@ -175,7 +175,9 @@ class NeuralRenderer(nn.Module):
     def decode(self, scene):
         features_3d = self.transform_3d(scene)
         features_2d = self.projection(features_3d)
-        return torch.sigmoid(self.transform_2d(features_2d))
+        # Removed the sigmoid
+        # return torch.sigmoid(self.transform_2d(features_2d))
+        return self.transform_2d(features_2d)
 
     def encode(self, img):
         features_2d = self.inv_transform_2d(img)

@@ -101,6 +101,7 @@ optimizer = get_optimizer(args.optimizer, args.lr, model.parameters())
 
 errors = []
 hitrates = []
+equiv_losses = []
 
 
 def equivariance_loss(z_transformed, z_next):
@@ -131,7 +132,7 @@ def train(epoch, data_loader, mode='train'):
         image = image.to(device)
         img_next = img_next.to(device)
         action = action.to(device).squeeze(1)
-        x_rec, _ = model(image, action)
+        x_rec_next, _ = model(image, action)
         encoded_image = model.encode(image)
         encoded_image_next = model.encode(img_next)
         encoded_image_transformed = model.act(encoded_image, action)
@@ -142,7 +143,7 @@ def train(epoch, data_loader, mode='train'):
         # equiv_loss_function(p_next, p_pred)
         # print(encoded_image.shape, encoded_image_next.shape, encoded_image_transformed.shape)
 
-        loss = rec_loss_function(x_rec, img_next).mean()
+        loss = rec_loss_function(x_rec_next, img_next).mean()
 
         # region CALCULATE HIT-RATE
         encoded_image_transformed_flat = encoded_image_transformed.view((batch_size, -1))
@@ -175,8 +176,11 @@ def train(epoch, data_loader, mode='train'):
     if mode == 'val':
         errors.append(mu_loss)
         hitrates.append(mu_hitrate)
+        equiv_losses.append(equiv_loss)
+
         np.save(f'{model_path}/errors_val.npy', errors)
         np.save(f'{model_path}/errors_hitrate.npy', hitrates)
+        np.save(f'{model_path}/errors_equiv.npy', equiv_losses)
         if run is not None:
             run[mode + "/epoch/val_loss"].log(mu_loss)
             run[mode + "/epoch/equiv_loss"].log(equiv_loss)

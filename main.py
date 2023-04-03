@@ -92,8 +92,7 @@ if args.use_simplified:
         isvae = True
     else:
         isvae = False
-    model = MDNSimplified(img_shape[0], args.latent_dim, N, extra_dim, model=args.model, normalize_extra=True,
-                          vae=isvae).to(
+    model = MDNSimplified(img_shape[0], args.latent_dim, N, extra_dim, model=args.model, normalize_extra=True).to(
         device)
 else:
     model = MDN(img_shape[0], args.latent_dim, N, extra_dim, model=args.model, normalize_extra=True).to(device)
@@ -275,28 +274,28 @@ def train(epoch, data_loader, mode='train'):
         # endregion
 
         # region CALCULATE HIT-RATE
-        if mode == "val":
-            if args.latent_dim == 3:
-                chamfer_matrix = \
-                    ((z_mean_pred.unsqueeze(1).unsqueeze(1) - z_mean_next.unsqueeze(2).unsqueeze(0)) ** 2).sum(-1).sum(
-                        -1).min(
-                        dim=-1)[
-                        0].sum(dim=-1)
-            else:
-                chamfer_matrix = \
-                    ((z_mean_pred.unsqueeze(1).unsqueeze(1) - z_mean_next.unsqueeze(2).unsqueeze(0)) ** 2).sum(-1).min(
-                        dim=-1)[
-                        0].sum(dim=-1)
-            if args.autoencoder == "vae":
-                loc_extra = extra[:, -2 * args.extra_dim: -args.extra_dim]
-                loc_extra_next = extra_next[:, -2 * args.extra_dim: -args.extra_dim]
-                extra_matrix = ((loc_extra.unsqueeze(0) - loc_extra_next.unsqueeze(1)) ** 2).sum(-1)
-            else:
-                extra_matrix = ((extra.unsqueeze(0) - extra_next.unsqueeze(1)) ** 2).sum(-1)
-            hitrate = hitRate_generic(chamfer_matrix + extra_matrix, image.shape[0])
-            mu_hit_rate += hitrate.item()
+        # if mode == "val":
+        if args.latent_dim == 3:
+            chamfer_matrix = \
+                ((z_mean_pred.unsqueeze(1).unsqueeze(1) - z_mean_next.unsqueeze(2).unsqueeze(0)) ** 2).sum(-1).sum(
+                    -1).min(
+                    dim=-1)[
+                    0].sum(dim=-1)
         else:
-            hitrate = 0
+            chamfer_matrix = \
+                ((z_mean_pred.unsqueeze(1).unsqueeze(1) - z_mean_next.unsqueeze(2).unsqueeze(0)) ** 2).sum(-1).min(
+                    dim=-1)[
+                    0].sum(dim=-1)
+        if args.autoencoder == "vae":
+            loc_extra = extra[:, -2 * args.extra_dim: -args.extra_dim]
+            loc_extra_next = extra_next[:, -2 * args.extra_dim: -args.extra_dim]
+            extra_matrix = ((loc_extra.unsqueeze(0) - loc_extra_next.unsqueeze(1)) ** 2).sum(-1)
+        else:
+            extra_matrix = ((extra.unsqueeze(0) - extra_next.unsqueeze(1)) ** 2).sum(-1)
+        hitrate = hitRate_generic(chamfer_matrix + extra_matrix, image.shape[0])
+        mu_hit_rate += hitrate.item()
+        # else:
+        #     hitrate = 0
         # endregion
 
         # region CALCULATE KL LOSS

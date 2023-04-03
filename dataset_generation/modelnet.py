@@ -97,7 +97,7 @@ def generate_training_data(dataset_folder, dataset_name, object_name: str, objec
 
 
 def generate_eval_data(dataset_folder, dataset_name, object_name: str, object_id: str, split: str = "train",
-                       total_rotations: int = 360):
+                       total_rotations: int = 2*360):
     if not os.path.exists(dataset_folder):
         os.makedirs(dataset_folder)
     # Regular dataset
@@ -106,21 +106,22 @@ def generate_eval_data(dataset_folder, dataset_name, object_name: str, object_id
     stabilizers = []
     labels = []
     angles = np.arange(0, total_rotations, total_rotations // num_angles)
+    print("Evaluation angles", angles)
     render_path = os.path.join(".", "data", "modelnet_renders", "renders", object_name, split)
     object_filename_root = object_name + "_" + object_id
 
     images_per_object = []
     labels_per_object = []
     orbit_info = []
-    for num_angle, angle in enumerate(angles):
+    for num_angle, num_view in enumerate(angles):
         print(
-            "Generating image with digit number {}, num example {}".format(object_name, num_angle))
-        image_path = os.path.join(render_path, object_filename_root + "_" + str(angle) + ".png")
+            "Generating image with digit number {}, num example {}, angle{}".format(object_name, num_angle, num_view))
+        image_path = os.path.join(render_path, object_filename_root + "_" + str(num_view) + ".png")
         image = Image.open(image_path)
         image = process_pil_image(image)
 
         images_per_object.append(image)
-        labels_per_object.append(angle * np.pi / 180)
+        labels_per_object.append(2 * num_view * np.pi / total_rotations)
 
     stabilizers.append([stabilizer_dict[object_name]] * len(angles))
     images.append(images_per_object)

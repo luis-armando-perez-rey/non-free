@@ -12,7 +12,7 @@ from utils.plotting_utils import plot_extra_dims, plot_images_distributions, \
     plot_embeddings_eval_torus, plot_projected_embeddings_pca
 from utils.plotting_utils_so3 import visualize_so3_probabilities
 from utils.torch_utils import torch_data_to_numpy
-from utils.disentanglement_metric import dlsbd_metric_mixture
+from utils.disentanglement_metric import dlsbd_metric_mixture, dlsbd_metric_mixture_monte
 from datasets.equiv_dset import EquivDataset
 
 # region PARSE ARGUMENTS
@@ -66,6 +66,7 @@ if args.autoencoder != 'None':
 else:
     decoder = None
 model.eval()
+model_path = os.path.join(args.checkpoints_dir, args.model_name)
 # endregion
 
 # region GET IMAGES
@@ -100,7 +101,6 @@ extra_next = extra_next.detach().cpu().numpy()
 mean_numpy = mean.detach().cpu().numpy()
 mean_next = mean_next.detach().cpu().numpy()
 std = np.exp(logvar.detach().cpu().numpy() / 2.) / 10
-print("Distribution of the standard deviations", np.unique(std * 10))
 std_next = np.exp(logvar_next.detach().cpu().numpy() / 2.) / 10
 
 # Plotting for SO(2) and its combinations
@@ -127,6 +127,33 @@ if args.latent_dim == 2 or args.latent_dim == 4:
     action = action.squeeze(1)
     mean_rot = get_rotated_mean(mean, action, args.latent_dim)
     action = action.detach().cpu().numpy()
+    # endregion
+
+    # region ESTIMATE DLSBD METRIC
+    if args.latent_dim == 4:
+        reshaped_eval_actions = eval_dset.flat_lbls.reshape((eval_dset.num_objects, -1, 2))
+        reshaped_stabs = eval_dset.flat_stabs.reshape((eval_dset.num_objects, -1, 2))
+    else:
+        reshaped_eval_actions = eval_dset.flat_lbls.reshape((eval_dset.num_objects, -1))
+        reshaped_stabs = eval_dset.flat_stabs.reshape((eval_dset.num_objects, -1))
+
+    reshaped_mean_eval = mean_eval.reshape(
+        (eval_dset.num_objects, -1, args.num, args.latent_dim)).detach().cpu().numpy()
+
+    print("Eval actions", type(reshaped_eval_actions), "Mean type", type(reshaped_mean_eval), "Stabs type",
+          type(reshaped_stabs))
+    print("Eval actions shape", reshaped_eval_actions.shape, "Mean shape", reshaped_mean_eval.shape, "Stabs shape",
+          reshaped_stabs.shape)
+    dlsbd = dlsbd_metric_mixture(reshaped_mean_eval, reshaped_eval_actions, reshaped_stabs, distance_function="chamfer")
+    dlsbd_monte = dlsbd_metric_mixture_monte(reshaped_mean_eval, reshaped_eval_actions, reshaped_stabs, distance_function="chamfer")
+    print("DLSBD Metric", dlsbd)
+    print("DLSBD Metric Monte", dlsbd_monte)
+
+    np.save(f'{model_path}/dlsbd.npy', [dlsbd])
+    np.save(f'{model_path}/dlsbd_monte.npy', [dlsbd_monte])
+    if run is not None:
+        run["metrics/dlsbd"].log(dlsbd)
+        run["metrics/dlsbd_monte"].log(dlsbd)
     # endregion
 
     # region PLOT STD DISTRIBUTION
@@ -230,6 +257,37 @@ if args.latent_dim == 2 or args.latent_dim == 4:
     unique_mean, unique_logvar, unique_extra = model(unique_images)
     unique_std = np.exp(unique_logvar.detach().cpu().numpy() / 2.) / 10
     print(unique_mean.shape, unique_extra.shape)
+    # endregion
+
+    # region PLOT CYLINDER
+    num_images = 10
+    fig = plt.figure(figsize=(5, 5))
+    ax = fig.add_subplot(111, projection='3d')
+    print("Mean eval shape", mean_eval.shape)
+    for i in range(mean_eval.shape[1]):
+        ax.scatter(mean_eval[:num_images, i, 0].detach().cpu().numpy(), mean_eval[:num_images, i, 1].detach().cpu().numpy(), np.arange(num_images))
+
+    if run is not None:
+        run["embeddings_cylinder"].upload(plt.gcf())
+
+
+    # fig, axes = plt.subplots(2, num_images,figsize=(num_images*2, 5))
+    # for i in range(num_images):
+    #     axes[0, i].imshow(np.transpose(eval_dset.flat_images[i].detach().cpu().numpy(), (1, 2, 0)))
+    #     plot_mixture_neurreps(mean_eval[i], ax=axes[1, i])
+    # if run is not None:
+    #     run["eval_data_examples"].upload(plt.gcf())
+
+
+
+    fig = plt.figure(figsize=(5, 5))
+    ax = fig.add_subplot(111)
+    print("Mean eval shape", mean_eval.shape)
+    for i in range(mean_eval.shape[1]):
+        ax.scatter(mean_eval[:num_images, i, 0].detach().cpu().numpy(), mean_eval[:num_images, i, 1].detach().cpu().numpy())
+    if run is not None:
+        run["embeddings_cylinder_top"].upload(plt.gcf())
+
     # endregion
 
     # region PLOT SUBMISSION
@@ -362,28 +420,7 @@ if args.latent_dim == 2 or args.latent_dim == 4:
                 run["traversal"].upload(plt.gcf())
     # endregion
 
-    # region ESTIMATE DLSBD METRIC
-    if args.latent_dim == 4:
-        reshaped_eval_actions = eval_dset.flat_lbls.reshape((eval_dset.num_objects, -1, 2))
-        reshaped_stabs = eval_dset.flat_stabs.reshape((eval_dset.num_objects, -1, 2))
-    else:
-        reshaped_eval_actions = eval_dset.flat_lbls.reshape((eval_dset.num_objects, -1))
-        reshaped_stabs = eval_dset.flat_stabs.reshape((eval_dset.num_objects, -1))
 
-    reshaped_mean_eval = mean_eval.reshape(
-        (eval_dset.num_objects, -1, args.num, args.latent_dim)).detach().cpu().numpy()
-
-    print("Eval actions", type(reshaped_eval_actions), "Mean type", type(reshaped_mean_eval), "Stabs type",
-          type(reshaped_stabs))
-    print("Eval actions shape", reshaped_eval_actions.shape, "Mean shape", reshaped_mean_eval.shape, "Stabs shape",
-          reshaped_stabs.shape)
-    dlsbd = dlsbd_metric_mixture(reshaped_mean_eval, reshaped_eval_actions, reshaped_stabs, distance_function="chamfer")
-    print("DLSBD Metric", dlsbd)
-    model_path = os.path.join(args.checkpoints_dir, args.model_name)
-    np.save(f'{model_path}/dlsbd.npy', [dlsbd])
-    if run is not None:
-        run["metrics/dlsbd"].log(dlsbd)
-    # endregion
 
     # region ESTIMATE HIT-RATE
 
@@ -410,30 +447,28 @@ if args.latent_dim == 2 or args.latent_dim == 4:
             rot = make_rotation_matrix(action)
             z_mean_pred = (rot @ z_mean.unsqueeze(-1)).squeeze(-1)  # Beware the detach!!!
         elif args.latent_dim == 3:
+            print("Action, mean shape", action.shape, z_mean.shape)
             z_mean_pred = action @ z_mean
         elif args.latent_dim > 3 and args.latent_dim % 2 == 0:
+
             action = action.squeeze(1)
             z_mean_pred = so2_rotate_subspaces(z_mean, action, detach=False)
         else:
             raise ValueError(f"Rotation not defined for latent dimension {args.latent_dim} ")
 
-        if args.latent_dim == 3:
-            chamfer_matrix = \
-                ((z_mean_pred.unsqueeze(1).unsqueeze(1) - z_mean_next.unsqueeze(2).unsqueeze(0)) ** 2).sum(-1).sum(
-                    -1).min(
-                    dim=-1)[
-                    0].sum(dim=-1)
-        else:
-            chamfer_matrix = \
-                ((z_mean_pred.unsqueeze(1).unsqueeze(1) - z_mean_next.unsqueeze(2).unsqueeze(0)) ** 2).sum(-1).min(
-                    dim=-1)[
-                    0].sum(dim=-1)
+        chamfer_matrix = \
+            ((z_mean_pred.unsqueeze(1).unsqueeze(1) - z_mean_next.unsqueeze(2).unsqueeze(0)) ** 2).sum(-1).sum(
+                -1).min(
+                dim=-1)[
+                0].sum(dim=-1)
         if args.autoencoder == "vae":
             loc_extra = extra[:, -2 * args.extra_dim: -args.extra_dim]
             loc_extra_next = extra_next[:, -2 * args.extra_dim: -args.extra_dim]
             extra_matrix = ((loc_extra.unsqueeze(0) - loc_extra_next.unsqueeze(1)) ** 2).sum(-1)
+
         else:
             extra_matrix = ((extra.unsqueeze(0) - extra_next.unsqueeze(1)) ** 2).sum(-1)
+
         hitrate = hitRate_generic(chamfer_matrix + extra_matrix, image.shape[0])
         mu_hit_rate += hitrate.item()
     mu_hit_rate /= total_batches
@@ -553,6 +588,61 @@ elif args.latent_dim == 3:
         if run is not None:
             run["rotvec_alone" + str(j)].upload(plt.gcf())
         fig.savefig(os.path.join(save_folder, f"rotvec_alone_{j}.png"), bbox_inches='tight')
+
+
+
+
+    print(f"Loading dataset {args.dataset} with dataset name {args.dataset_name}")
+    dset_val = EquivDataset(f'{args.data_dir}/{args.dataset}/',
+                            list_dataset_names=[dataset_name + "_val" for dataset_name in args.dataset_name],
+                            max_data_per_dataset=-1)
+
+    # Note that the batch size is fixed to 20
+    eval_batch_size = 20
+    val_loader = torch.utils.data.DataLoader(dset_val, batch_size=eval_batch_size, shuffle=True)
+    print("# test set:", len(dset_val))
+    mu_hit_rate = 0
+    total_batches = len(val_loader)
+    for batch_idx, (image, img_next, action) in enumerate(val_loader):
+        batch_size = image.shape[0]
+        image = image.to(device)
+        img_next = img_next.to(device)
+        action = action.to(device)
+
+        z_mean, z_logvar, extra = model(image)
+        z_mean_next, z_logvar_next, extra_next = model(img_next)
+        if args.latent_dim == 2:
+            action = torch.flatten(action)
+            rot = make_rotation_matrix(action)
+            z_mean_pred = (rot @ z_mean.unsqueeze(-1)).squeeze(-1)  # Beware the detach!!!
+        elif args.latent_dim == 3:
+            z_mean_pred = action @ z_mean
+        elif args.latent_dim > 3 and args.latent_dim % 2 == 0:
+            action = action.squeeze(1)
+            z_mean_pred = so2_rotate_subspaces(z_mean, action, detach=False)
+        else:
+            raise ValueError(f"Rotation not defined for latent dimension {args.latent_dim} ")
+
+        print("Z mean pred shape", z_mean_pred.shape)
+        chamfer_matrix = \
+            ((z_mean_pred.unsqueeze(1).unsqueeze(1) - z_mean_next.unsqueeze(2).unsqueeze(0)) ** 2).sum(-1).sum(
+                -1).min(
+                dim=-1)[
+                0].mean(dim=-1)
+
+        if args.autoencoder == "vae":
+            loc_extra = extra[:, -2 * args.extra_dim: -args.extra_dim]
+            loc_extra_next = extra_next[:, -2 * args.extra_dim: -args.extra_dim]
+            extra_matrix = ((loc_extra.unsqueeze(0) - loc_extra_next.unsqueeze(1)) ** 2).sum(-1)
+        else:
+            extra_matrix = ((extra.unsqueeze(0) - extra_next.unsqueeze(1)) ** 2).sum(-1)
+        hitrate = hitRate_generic(chamfer_matrix + extra_matrix, image.shape[0])
+        mu_hit_rate += hitrate.item()
+    mu_hit_rate /= total_batches
+    if run is not None:
+        run["metrics/hitrate"].log(mu_hit_rate)
+    print("Hit rate", mu_hit_rate)
+    np.save(f'{model_path}/errors_hitrate20.npy', [mu_hit_rate])
 
 # endregion
 if run is not None:

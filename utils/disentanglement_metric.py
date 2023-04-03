@@ -335,14 +335,68 @@ def dlsbd_metric_mixture(z, angles, stabilizers, average: bool = True, distance_
             # print("Number of subspace", num_subspace)
             z_inv_object_subspace = z_inv_object[..., num_subspace * 2:(num_subspace + 1) * 2]
             z_inv_mean_subspace = np.expand_dims(z_inv_mean[num_subspace], axis=0)
-            print("ZINV MEAN SUBSPACE", z_inv_mean_subspace.shape, z_inv_object_subspace.shape)
+            print("ZINV MEAN SUBSPACE", z_inv_mean[num_subspace].shape)
+            # print("ZINV MEAN SUBSPACE", z_inv_mean_subspace.shape, z_inv_object_subspace.shape)
             dispersion_obj = calculate_dispersion(z_inv_object_subspace,
                                                   z_inv_mean_subspace,
                                                   distance_function=distance_function)
-            print(
-                f"Dispersion for object {num_object}, with num stabilizers {stabilizers[num_object]} num subspace {num_subspace} = {dispersion_obj} ")
+            # print(
+            #     f"Dispersion for object {num_object}, with num stabilizers {stabilizers[num_object]} num subspace {num_subspace} = {dispersion_obj} ")
             # Get dispersion values per object
             dispersion_values.append(np.mean(dispersion_obj))
+
+    if average:
+        dispersion = np.mean(dispersion_values)
+    else:
+        dispersion = np.array(dispersion_values)
+
+    return dispersion
+
+def dlsbd_metric_mixture_monte(z, angles, stabilizers, average: bool = True, distance_function: str = "euclidean"):
+    """
+    Calculates the lsbd metric for embeddings z with shape (num_objects, num_angles, num_gaussians, latent_dim)
+    corresponding to a mixture of a certain distribution. Latent dim should be 2 in this case.
+    Shape of angles is assumed to be (num_objects, num_angles)
+    :param z: embeddings in Z_G
+    :param angles: angles used to generate the dataset where embeddings are extracted from
+    :param stabilizers: number of stabilizers for each object and subspace. Has shape (num_objects, num_subspaces)
+    :param distance_function: distance function to use for calculating the dispersion
+    :return:
+    """
+    num_gaussians = z.shape[-2]
+    num_subspaces = z.shape[-1] // 2
+    print("Number of mixture components", num_gaussians)
+    print("Number of subspaces", num_subspaces)
+    angles = repeat_angles_n_gaussians(angles, num_gaussians)
+    z_inv = apply_inverse_rotation(z, angles)
+    print("Inverse rotation shape", z_inv.shape)
+    print("Number of objects", z_inv.shape[0])
+    dispersion_values = []
+    for num_object in range(z_inv.shape[0]):
+
+        z_inv_object = z_inv[num_object]
+        # z_inv_mean = estimate_mean_inv(z_inv_object)
+
+        # random_index = np.random.randint(0, len(z_inv_object))
+        # Estimate distances to each embedding per orbit
+        for z_inv_mean in z_inv_object:
+            # print("ZINV MEAN MC", z_inv_mean)
+
+            # print(f"Stabilizers of num object {num_object}", stabilizers[num_object])
+            for num_subspace in range(num_subspaces):
+                # print("Number of subspace", num_subspace)
+                z_inv_object_subspace = z_inv_object[..., num_subspace * 2:(num_subspace + 1) * 2]
+                z_inv_mean_subspace = np.expand_dims(z_inv_mean, axis=0)[..., num_subspace * 2:(num_subspace + 1) * 2]
+                print("ZINV MEAN SUBSPACE MC", z_inv_mean[num_subspace].shape, z_inv_mean_subspace.shape)
+                # print("ZINV MEAN SUBSPACE", z_inv_mean_subspace.shape, z_inv_object_subspace.shape)
+                dispersion_obj = calculate_dispersion(z_inv_object_subspace,
+                                                      z_inv_mean_subspace,
+                                                      distance_function=distance_function)
+                # print(
+                #     f"Dispersion for object {num_object}, with num stabilizers {stabilizers[num_object]} num subspace {num_subspace} = {dispersion_obj} ")
+                # Get dispersion values per object
+                print("Shape disp obj", dispersion_obj.shape)
+                dispersion_values.append(np.mean(dispersion_obj))
 
     if average:
         dispersion = np.mean(dispersion_values)
