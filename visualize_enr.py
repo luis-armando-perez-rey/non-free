@@ -258,6 +258,36 @@ if args.dataset != "symmetric_solids":
 
 
 # region RECONSTRUCTIONS EMBEDDINGS ORIGINAL
+unique_images = []
+for unique in np.unique(dset.stabs):
+    unique_images.append(dset.data[dset.stabs == unique][0][0])
+
+unique_images = torch.tensor(np.array(unique_images), dtype=img.dtype).to(device)
+
+unique_mean = model.encode(torch.tensor(unique_images, dtype=img.dtype).to(device))
+
+print("Shape of unique mean", unique_mean.shape)
+x_rec = model.decode(unique_mean)
+x_rec = x_rec.detach().cpu().numpy()
+# Plot the reconstructions in rows of 10
+num_images = 10
+
+num_orbits = len(eval_dset.data)
+num_views = len(eval_dset.data[orbitnum])
+
+print("Reconstruction shape", x_rec.shape, "Eval mean shape", eval_mean.shape, "Eval data shape", eval_dset.data.shape)
+x_rec = np.moveaxis(x_rec, 1, -1)
+for num_x, x in enumerate(x_rec):
+    add_image_to_ax(x)
+    if run is not None:
+        run[f"reconstructions_"+str(num_x)].upload(plt.gcf())
+plt.close("all")
+
+
+
+
+
+
 
 # Select an image from each of the unique stabilizer objects
 print("Shape of eval data", eval_dset.data.shape, eval_dset.flat_images.shape, eval_mean.shape)
@@ -268,6 +298,8 @@ num_images = 10
 
 num_orbits = len(eval_dset.data)
 num_views = len(eval_dset.data[orbitnum])
+
+print("Reconstruction shape", x_rec.shape, "Eval mean shape", eval_mean.shape, "Eval data shape", eval_dset.data.shape)
 x_rec = x_rec.reshape((num_orbits, num_views, *eval_dset.data.shape[-3:]))
 x_rec = np.moveaxis(x_rec, 2, -1)
 eval_mean_reshaped = eval_mean.reshape((num_orbits, num_views, eval_mean.shape[-3], eval_mean.shape[-2], eval_mean.shape[-1]))
@@ -489,12 +521,7 @@ if run is not None:
 #         ax.set_zticks([])
 #         fig.savefig(os.path.join(save_folder, f"rotvec_alone_{i}.png"), bbox_inches='tight')
 #
-#     unique_images = []
-#     for unique in np.unique(dset.stabs):
-#         unique_images.append(dset.data[dset.stabs == unique][0][0])
-#
-#     unique_images = torch.tensor(np.array(unique_images), dtype=img.dtype).to(device)
-#     unique_mean, unique_logvar, unique_extra = model(unique_images)
+
 #     # region PLOT RECONSTRUCTIONS
 #     if args.autoencoder != "None":
 #         x_rec = decoder(torch.cat([unique_mean.view((unique_mean.shape[0], -1)), unique_extra], dim=-1))
