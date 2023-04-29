@@ -5,7 +5,7 @@ import os
 import torch
 import matplotlib.pyplot as plt
 from scipy.spatial.transform import Rotation as R
-from utils.dataset_utils import get_dataset, get_unique_data
+from utils.dataset_utils import get_dataset, get_data_from_dataloader, get_loading_parameters
 from utils.nn_utils import get_rotated_mean, make_rotation_matrix, hitRate_generic, so2_rotate_subspaces
 from utils.plotting_utils import plot_extra_dims, plot_images_distributions, \
     plot_mixture_neurreps, add_image_to_ax, add_distribution_to_ax_torus, save_embeddings_on_circle, yiq_embedding, \
@@ -16,6 +16,7 @@ from utils.torch_utils import torch_data_to_numpy
 from utils.disentanglement_metric import dlsbd_metric_mixture, dlsbd_metric_mixture_monte
 from utils.model_utils import reload_model, get_embeddings, get_reconstructions, sigmoid, get_n_clusters_noise
 from datasets.equiv_dset import EquivDataset
+from dataset_generation.modelnet_efficient import ModelNetUniqueDataset, ModelNetDataset
 
 # region PARSE ARGUMENTS
 parser = argparse.ArgumentParser()
@@ -32,11 +33,11 @@ args = pickle.load(open(meta_file, 'rb'))['args']
 print("Arguments", args)
 save_folder = os.path.join(".", "visualizations", args.model_name)
 os.makedirs(save_folder, exist_ok=True)
-# if args.gpu != "":
-#     device = "cpu"
-# else:
-#     device = torch.device("cuda:" + args.gpu if torch.cuda.is_available() else "cpu")
-device = torch.device("cpu")
+if args.gpu != "":
+    device = "cpu"
+else:
+    device = torch.device("cuda:" + args.gpu if torch.cuda.is_available() else "cpu")
+# device = torch.device("cpu")
 # torch.manual_seed(42)
 torch.cuda.empty_cache()
 # endregion
@@ -53,7 +54,8 @@ else:
 
 # region LOAD DATASET
 dset, eval_dset = get_dataset(args.data_dir, args.dataset, args.dataset_name)
-train_loader = torch.utils.data.DataLoader(dset, batch_size=100, shuffle=True)
+train_loader = torch.utils.data.DataLoader(dset, batch_size=100, shuffle=True, num_workers=4, pin_memory=True)
+
 # endregion
 
 # region GET MODEL
@@ -79,14 +81,14 @@ print("Identifiers shape", identifiers.shape)
 
 img_shape = np.array(img.shape[1:])
 
-
-if args.dataset !="modelnet_efficient":
+if args.dataset != "modelnet_efficient":
     flat_images_tensor = torch.Tensor(eval_dset.flat_images).to(device)  # transform to torch tensor
     eval_tensor_dset = torch.utils.data.TensorDataset(flat_images_tensor)  # create your datset
     print("Flat images shape", eval_dset.flat_images.shape)
 else:
     eval_tensor_dset = eval_dset
-eval_dataloader = torch.utils.data.DataLoader(eval_tensor_dset, batch_size=args.batch_size)
+eval_dataloader = torch.utils.data.DataLoader(eval_tensor_dset, batch_size=args.batch_size, num_workers=4,
+                                              pin_memory=True)
 
 # Get the numpy array versions of the images
 print("Getting numpy arrays")
@@ -116,7 +118,7 @@ std_next = np.exp(logvar_next.detach().cpu().numpy() / 2.) / 10
 # Plotting for SO(2) and its combinations
 if args.latent_dim == 2 or args.latent_dim == 4:
 
-    mean_eval, logvar_eval, std_eval, extra_eval = get_embeddings(eval_dataloader, model, args.variablescale)
+    mean_eval, logvar_eval, std_eval, extra_eval = get_embeddings(eval_dataloader, model, args.variablescale, device)
 
     action = action.squeeze(1)
     mean_rot = get_rotated_mean(mean, action, args.latent_dim)
@@ -127,13 +129,24 @@ if args.latent_dim == 2 or args.latent_dim == 4:
     if args.latent_dim == 4:
         reshaped_eval_actions = eval_dset.flat_lbls.reshape((eval_dset.num_objects, eval_dset.num_views, 2))
         reshaped_stabs = eval_dset.flat_stabs.reshape((eval_dset.num_objects, eval_dset.num_views, 2))
+        eval_stabs = eval_dset.flat_stabs
     else:
-        reshaped_eval_actions = eval_dset.flat_lbls.reshape((eval_dset.num_objects, eval_dset.num_views))
-        reshaped_stabs = eval_dset.flat_stabs.reshape((eval_dset.num_objects, eval_dset.num_views))
+        if args.dataset == "modelnet_efficient":
+            eval_actions = get_data_from_dataloader(eval_dataloader, 1).numpy()
+            eval_stabs = get_data_from_dataloader(eval_dataloader, 2).numpy()
+            eval_orbits = get_data_from_dataloader(eval_dataloader, 3).numpy()
+            eval_object_types = get_data_from_dataloader(eval_dataloader, 4).numpy()
+            reshaped_eval_actions = eval_actions.reshape((eval_dset.num_objects, eval_dset.num_views))
+            reshaped_stabs = eval_stabs.reshape((eval_dset.num_objects, eval_dset.num_views))
+        else:
+            eval_stabs = eval_dset.flat_stabs
+            reshaped_eval_actions = eval_dset.flat_lbls.reshape((eval_dset.num_objects, eval_dset.num_views))
+            reshaped_stabs = eval_dset.flat_stabs.reshape((eval_dset.num_objects, eval_dset.num_views))
 
     # Dataset with shape (num_objects, num_views, N, latent_dim)
     reshaped_mean_eval = mean_eval.reshape(
         (eval_dset.num_objects, eval_dset.num_views, args.num, args.latent_dim)).detach().cpu().numpy()
+
     dlsbd = dlsbd_metric_mixture(reshaped_mean_eval, reshaped_eval_actions, reshaped_stabs, distance_function="chamfer")
     dlsbd_monte = dlsbd_metric_mixture_monte(reshaped_mean_eval, reshaped_eval_actions, reshaped_stabs,
                                              distance_function="chamfer")
@@ -198,24 +211,23 @@ if args.latent_dim == 2 or args.latent_dim == 4:
     # endregion
 
     # region PLOTS ON THE CIRCLE
-    # Don't plot with modelnet regular. Too many objects
-    if args.latent_dim != 4:
-        if n_data_elements == 6:
-            print("EVAL ACTIONS SHAPE", eval_dset.factors[1].shape)
-            print("Mean eval shape", mean_eval.shape)
-            num_views = eval_dset.data.shape[1]
-            figures = save_embeddings_on_circle(mean_eval.detach().cpu().numpy(), std_eval, eval_dset.flat_factors[1],
-                                                save_folder,
-                                                args.dataset_name[0],
-                                                increasing_radius=True)
-        else:
-            figures = save_embeddings_on_circle(mean_eval.detach().cpu().numpy(), std_eval, eval_dset.flat_stabs,
-                                                save_folder,
-                                                args.dataset_name[0],
-                                                increasing_radius=True)
-        if run is not None:
-            for i, fig in enumerate(figures):
-                run[f"embeddings_on_circle_{i}"].upload(fig)
+    # TODO: Remove plot on circle since it needs to be updated for this dataset
+    # if args.latent_dim != 4:
+    #     if n_data_elements == 6:
+    #         print("EVAL ACTIONS SHAPE", eval_dset.factors[1].shape)
+    #         print("Mean eval shape", mean_eval.shape)
+    #         figures = save_embeddings_on_circle(mean_eval.detach().cpu().numpy(), std_eval, eval_object_types,
+    #                                             save_folder,
+    #                                             args.dataset_name[0],
+    #                                             increasing_radius=True)
+    #     else:
+    #         figures = save_embeddings_on_circle(mean_eval.detach().cpu().numpy(), std_eval, eval_stabs,
+    #                                             save_folder,
+    #                                             args.dataset_name[0],
+    #                                             increasing_radius=True)
+    #     if run is not None:
+    #         for i, fig in enumerate(figures):
+    #             run[f"embeddings_on_circle_{i}"].upload(fig)
     # endregion
 
     # region PLOT ON THE TORUS
@@ -228,23 +240,15 @@ if args.latent_dim == 2 or args.latent_dim == 4:
     # endregion
 
     # region GET UNIQUE EMBEDDINGS
-    if n_data_elements == 5 or n_data_elements == 6:
-        # Use the orbits as identifiers i.e. factors[0]
-        eval_identifiers = dset.factors[0]
-        unique_object_types = get_unique_data(dset.factors[1], eval_identifiers)
-        print("Orbits shape", dset.factors[0].shape)
-        print("Object types shape", dset.factors[1].shape)
-        print("Unique object types shape", unique_object_types.shape)
-        print("Eval identifiers shape", eval_identifiers.shape)
-        print("Data shape", dset.data.shape)
-    else:
-        # Use the number of stabilizers as identifiers
-        eval_identifiers = dset.stabs
-        unique_object_types = None
-    unique_images = get_unique_data(dset.data, eval_identifiers)
-    unique_images = torch.tensor(unique_images, dtype=img.dtype).to(device)
-    print("Unique images shape", unique_images.shape)
-    unique_mean, unique_logvar, unique_extra = model(unique_images)
+
+    train_data_parameters = get_loading_parameters(args.data_dir, args.dataset, args.dataset_name)[0]
+    train_data_parameters.pop("shuffle_available_views")
+    # Select by the object orbits
+    dset_unique = ModelNetUniqueDataset(**train_data_parameters, index_unique_factors=-2)
+    dset_unique_loader = torch.utils.data.DataLoader(dset_unique, batch_size=10, shuffle=False, num_workers=4,
+                                                     pin_memory=True)
+
+    unique_mean, unique_logvar, unique_std, unique_extra = get_embeddings(dset_unique_loader, model, args.variablescale, device)
     unique_std = np.exp(unique_logvar.detach().cpu().numpy() / 2.) / 10
     print(unique_mean.shape, unique_extra.shape)
     # endregion
@@ -260,15 +264,12 @@ if args.latent_dim == 2 or args.latent_dim == 4:
     fig, ax = plot_clusters(n_clusters, args.num)
     if run is not None:
         run["plots/n_clusters"].upload(fig)
-    if n_data_elements == 5 or n_data_elements == 6:
-        for num_object_type, unique_object_type in enumerate(np.unique(unique_object_types)):
-            fig, ax = plot_clusters(n_clusters[unique_object_types == unique_object_type], args.num, ax, label = str(unique_object_type))
-        if run is not None:
-            run["plots/n_clusters"].upload(fig)
-
-
-
-
+    # if n_data_elements == 5 or n_data_elements == 6:
+    #     for num_object_type, unique_object_type in enumerate(np.unique(unique_object_types)):
+    #         fig, ax = plot_clusters(n_clusters[unique_object_types == unique_object_type], args.num, ax,
+    #                                 label=str(unique_object_type))
+    #     if run is not None:
+    #         run["plots/n_clusters"].upload(fig)
 
     # endregion
 
@@ -283,91 +284,26 @@ if args.latent_dim == 2 or args.latent_dim == 4:
     # endregion
 
     # region PLOT SUBMISSION
-    submission = False
-    if submission:
-        for num_unique, unique_image in enumerate(unique_images.detach().cpu().numpy()):
-            ax = add_image_to_ax(np.transpose(unique_image, (1, 2, 0)))
-            fig = plt.gcf()
-            fig.savefig(os.path.join(save_folder, f"test_image_{num_unique}.png"), bbox_inches='tight')
-            if run is not None:
-                run[f"image_{num_unique}"].upload(plt.gcf())
-                # Plot mixture distribution
-
-            if args.latent_dim == 4:
-                fig, ax = plt.subplots(1, 1, figsize=(5, 5))
-                ax = add_distribution_to_ax_torus(unique_mean[num_unique].detach().cpu().numpy(),
-                                                  unique_std[num_unique],
-                                                  ax, n=args.num, color="r", scatter=True)
-                ax.set_xlim([-np.pi, np.pi])
-                ax.set_ylim([-np.pi, np.pi])
-                ax.set_xticks([])
-                ax.set_yticks([])
-
-                plt.savefig(os.path.join(save_folder, f"test_mixture_{num_unique}.png"), bbox_inches='tight')
-            else:
-                plot_mixture_neurreps(unique_mean[num_unique].detach().cpu().numpy())
-            if run is not None:
-                run[f"test_mixture_{num_unique}"].upload(plt.gcf())
-            plt.savefig(os.path.join(save_folder, f"test_mixture_{num_unique}.png"), bbox_inches='tight')
-        # endregion
-
-        # region PLOT RECONSTRUCTIONS
-        if args.autoencoder != "None":
-            if args.autoencoder == "ae_single" or args.autoencoder == "vae":
-                if args.autoencoder == "vae":
-                    extra_loc = unique_extra[:, -2 * args.extra_dim: args.extra_dim]
-                    x_rec = decoder(torch.cat([unique_mean[:, 0], extra_loc], dim=-1))
-                else:
-                    x_rec = decoder(torch.cat([unique_mean[:, 0], unique_extra], dim=-1))
-                x_rec = x_rec.permute((0, 2, 3, 1)).detach().cpu().numpy()
-                for j in range(len(x_rec)):
-                    add_image_to_ax(1 / (1 + np.exp(-x_rec[j])))
-                    if run is not None:
-                        run[f"reconstruction_{j}"].upload(plt.gcf())
-                    plt.savefig(os.path.join(save_folder, f"reconstruction_{j}.png"), bbox_inches='tight')
-                    add_image_to_ax(unique_images[j].permute((1, 2, 0)).detach().cpu().numpy())
-                    plt.savefig(os.path.join(save_folder, f"input_image_{j}.png"), bbox_inches='tight')
-            else:
-                x_rec = decoder(torch.cat([unique_mean.view((unique_mean.shape[0], -1)), unique_extra], dim=-1))
-                x_rec = x_rec.permute((0, 2, 3, 1)).detach().cpu().numpy()
-                for j in range(len(x_rec)):
-                    add_image_to_ax(1 / (1 + np.exp(-x_rec[j])))
-                    if run is not None:
-                        run[f"reconstruction_{j}"].upload(plt.gcf())
-                    plt.savefig(os.path.join(save_folder, f"reconstruction_{j}.png"), bbox_inches='tight')
-                    add_image_to_ax(unique_images[j].permute((1, 2, 0)).detach().cpu().numpy())
-                    plt.savefig(os.path.join(save_folder, f"input_image_{j}.png"), bbox_inches='tight')
-
-            # boolean_selection = (flat_stabilizers == unique)
-            # fig, _ = plot_images_multi_reconstructions(npimages_eval[boolean_selection][:5],
-            #                                            reconstructions_np[boolean_selection][:5])
-            # fig.savefig(os.path.join(save_folder, f"{unique}_reconstructions.png"), bbox_inches='tight')
-    else:
-        x_rec = get_reconstructions(unique_mean, unique_extra, decoder, args.extra_dim, args.autoencoder)
-        x_rec = sigmoid(x_rec.permute((0, 2, 3, 1)).detach().cpu().numpy())
-        figures = plot_image_mixture_rec_all(unique_images, unique_mean, x_rec, num_objects_per_row=20, num_rows=3)
-        for num_fig, fig in enumerate(figures):
-            fig.savefig(os.path.join(save_folder, f"{num_fig}_img_mix_rec.png"), bbox_inches='tight')
-            plt.close(fig)
-            if run is not None:
-                run[f"/plots/img_mix_rec{num_fig}"].upload(fig)
+    unique_images = get_data_from_dataloader(dset_unique_loader, 0)
+    x_rec = get_reconstructions(unique_mean, unique_extra, decoder, args.extra_dim, args.autoencoder)
+    x_rec = sigmoid(x_rec.permute((0, 2, 3, 1)).detach().cpu().numpy())
+    figures = plot_image_mixture_rec_all(unique_images, unique_mean, x_rec, num_objects_per_row=20, num_rows=7)
+    for num_fig, fig in enumerate(figures):
+        fig.savefig(os.path.join(save_folder, f"{num_fig}_img_mix_rec.png"), bbox_inches='tight')
+        plt.close(fig)
+        if run is not None:
+            run[f"/plots/img_mix_rec{num_fig}"].upload(fig)
     # endregion
 
     # region LATENT TRAVERSAL
-    unique_images = []
     num_unique_examples = 1
-    if n_data_elements == 5:
-        identifiers = dset.factors[1]
-    else:
-        identifiers = dset.stabs
-    unique_images = get_unique_data(dset.data, identifiers)
-    num_unique_orbits = len(unique_images)
+    # Select based on type of object
+    dset_unique = ModelNetUniqueDataset(**train_data_parameters, index_unique_factors=-1)
+    dset_unique_loader = torch.utils.data.DataLoader(dset_unique, batch_size=10, shuffle=False, num_workers=4,
+                                                     pin_memory=True)
 
-
-    unique_images = torch.tensor(unique_images.reshape(-1, *unique_images[0].shape[-3:]), dtype=img.dtype).to(device)
-    print(unique_images.shape)
-    unique_mean, unique_logvar, unique_extra = model(unique_images)
-    unique_images = unique_images.reshape((num_unique_orbits, num_unique_examples, *unique_images.shape[-3:]))
+    unique_mean, unique_logvar, unique_std, unique_extra = get_embeddings(dset_unique_loader, model, args.variablescale, device)
+    num_unique_orbits = len(unique_mean)
 
     if args.latent_dim != 4:
         num_points_traversal = 15
@@ -445,13 +381,24 @@ if args.latent_dim == 2 or args.latent_dim == 4:
     # region ESTIMATE HIT-RATE
 
     print(f"Loading dataset {args.dataset} with dataset name {args.dataset_name}")
-    dset_val = EquivDataset(f'{args.data_dir}/{args.dataset}/',
-                            list_dataset_names=[dataset_name + "_val" for dataset_name in args.dataset_name],
-                            max_data_per_dataset=-1)
+
     # Note that the batch size is fixed to 20
     eval_batch_size = 20
-    val_loader = torch.utils.data.DataLoader(dset_val, batch_size=eval_batch_size, shuffle=True)
-    print("# test set:", len(dset_val))
+
+    eval_dset = ModelNetDataset("/data/active_views",
+                                split="train",
+                                object_type_list=args.dataset_name,
+                                examples_per_object=12,
+                                use_random_initial=True,
+                                total_views=360,
+                                fixed_number_views=12,
+                                shuffle_available_views=True,
+                                use_random_choice=False,
+                                seed=70)
+
+    val_loader = torch.utils.data.DataLoader(eval_dset, batch_size=eval_batch_size, shuffle=True, num_workers=4,
+                                             pin_memory=True)
+    print("# test set:", len(eval_dset))
     mu_hit_rate = 0
     total_batches = len(val_loader)
     for batch_idx, (image, img_next, action) in enumerate(val_loader):
@@ -624,7 +571,8 @@ elif args.latent_dim == 3:
 
     # Note that the batch size is fixed to 20
     eval_batch_size = 20
-    val_loader = torch.utils.data.DataLoader(dset_val, batch_size=eval_batch_size, shuffle=True)
+    val_loader = torch.utils.data.DataLoader(dset_val, batch_size=eval_batch_size, shuffle=True, num_workers=4,
+                                             pin_memory=True)
     print("# test set:", len(dset_val))
     mu_hit_rate = 0
     total_batches = len(val_loader)
