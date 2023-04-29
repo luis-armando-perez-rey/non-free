@@ -124,10 +124,11 @@ class EquivarianceLoss:
         sample1 = p1.sample((n_samples,))
         sample2 = p2.sample((n_samples,))
 
-        entropy1 = -p1.log_prob(sample1).sum(0).mean()
-        entropy2 = -p2.log_prob(sample2).sum(0).mean()
-        kl12 = p1.log_prob(sample1).sum(0).mean() - p2.log_prob(sample1).sum(0).mean()
-        kl21 = p2.log_prob(sample2).sum(0).mean() - p1.log_prob(sample2).sum(0).mean()
+        # Substituted for JSD Jensen Shannon Divergence
+        entropy1 = p1.log_prob(sample1).sum(0).mean()
+        entropy2 = p2.log_prob(sample2).sum(0).mean()
+        kl12 = - p2.log_prob(sample1).sum(0).mean()
+        kl21 = - p1.log_prob(sample2).sum(0).mean()
 
         # TODO: Changed to entropy to weight
         return chamfer_reg * (entropy1 + entropy2) + kl12 + kl21

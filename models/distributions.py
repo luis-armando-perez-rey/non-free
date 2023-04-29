@@ -65,6 +65,12 @@ class MixtureDistribution(D.MixtureSameFamily):
             def sample_latent(tuple_samples):
                 angle = self.sample(tuple_samples)
                 return torch.stack([torch.cos(angle), torch.sin(angle)], dim=-1)
+        elif self.encoder_distribution_type == "gaussian-mixture":
+            # Sample from gaussian mixture and project to the unit circle
+            def sample_latent(tuple_samples):
+                sample = self.sample(tuple_samples)
+                sample = torch.nn.functional.normalize(sample)
+                return sample
         else:
             sample_latent = self.sample
         return sample_latent
@@ -121,11 +127,26 @@ def get_z_values(p: MixtureDistribution, extra: torch.tensor, n_samples: int, au
             # Sample from posterior over Z_I
             loc_extra = extra[..., :extra.shape[-1] // 2]
             logvar_extra = extra[..., extra.shape[-1] // 2:]
+            # Uncomment for fixing the scale parameter of the extra values
+            logvar_extra = -4.6 * torch.ones(logvar_extra.shape).to(logvar_extra.device)
             p_orbit = torch.distributions.Normal(loc_extra, torch.exp(logvar_extra / 2.0))
             extra_sample = p_orbit.sample()
             # Repeat samples from Z_I to match the number of samples from Z_G
             extra_repeated = extra_sample.unsqueeze(1).repeat(1, z.shape[1], 1)
             z = torch.cat([z.view((z.shape[0], z.shape[1], -1)), extra_repeated], dim=-1)
+    elif autoencoder_type == "vae_mixture":
+        z = torch.movedim(p.sample_latent((n_samples,)), 0, 1)
+        if extra is not None:
+            # Sample from posterior over Z_I
+            loc_extra = extra[..., :extra.shape[-1] // 2]
+            logvar_extra = extra[..., extra.shape[-1] // 2:]
+            # Uncomment for fixing the scale parameter of the extra values
+            # Allow variable location for the extra values
+            # logvar_extra = -4.6 * torch.ones(logvar_extra.shape).to(logvar_extra.device)
+            p_orbit = torch.distributions.Normal(loc_extra, torch.exp(logvar_extra / 2.0))
+            extra_sample = p_orbit.sample()
+            z = torch.reshape(z, (z.shape[0], -1))
+            z = torch.cat([z, extra_sample], dim=-1)
 
     else:
         z = None
