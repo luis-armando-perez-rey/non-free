@@ -258,16 +258,14 @@ def estimate_kmeans_inv(z_inv, stabilizers):
         z_inv_mean = []
         for num_subspace in range(2):
             obj_stabilizers = np.amin([stabilizers[num_subspace], n_gaussians])
-            print("Number of object stabilizers ", obj_stabilizers)
+
             z_inv_subspace = z_inv[..., num_subspace * 2:(num_subspace + 1) * 2]
             kmeans = KMeans(obj_stabilizers).fit(z_inv_subspace.reshape((-1, z_inv_subspace.shape[-1])))
             z_inv_mean.append(kmeans.cluster_centers_ / np.linalg.norm(kmeans.cluster_centers_, axis=-1, keepdims=True))
 
     elif latent_dim == 2:
         z_inv_mean = []
-        print("Stabilizers", stabilizers)
         obj_stabilizers = np.amin([stabilizers, n_gaussians])
-        print("Number of object stabilizers ", obj_stabilizers)
         kmeans = KMeans(obj_stabilizers).fit(z_inv.reshape((-1, z_inv.shape[-1])))
         z_inv_mean.append(kmeans.cluster_centers_ / np.linalg.norm(kmeans.cluster_centers_, axis=-1, keepdims=True))
     else:
@@ -290,7 +288,6 @@ def calculate_dispersion(z_inv, z_inv_mean, distance_function: str = "euclidean"
         raise NotImplementedError
     elif distance_function == "chamfer":
         dispersion = matrix_dist_numpy(z_inv, z_inv_mean).min(-1)
-        print("Dispersion shape!!", dispersion.shape)
         dispersion = np.mean(dispersion)
     else:
         raise NotImplementedError
@@ -300,9 +297,7 @@ def calculate_dispersion(z_inv, z_inv_mean, distance_function: str = "euclidean"
 def matrix_dist_numpy(z_mean_next, z_mean_pred):
     latent_dim = z_mean_next.shape[-1]
     if latent_dim != 3:
-        print("Latent dimension is not 3", (np.expand_dims(z_mean_pred, 1) - np.expand_dims(z_mean_next, 2)).shape)
         return ((np.expand_dims(z_mean_pred, 1) - np.expand_dims(z_mean_next, 2)) ** 2).sum(-1)
-
     else:
         return ((np.expand_dims(z_mean_pred, 1) - np.expand_dims(z_mean_next, 2)) ** 2).sum(-1).sum(-1)
 
@@ -320,11 +315,8 @@ def dlsbd_metric_mixture(z, angles, stabilizers, average: bool = True, distance_
     """
     num_gaussians = z.shape[-2]
     num_subspaces = z.shape[-1] // 2
-    print("Number of mixture components", num_gaussians)
-    print("Number of subspaces", num_subspaces)
     angles = repeat_angles_n_gaussians(angles, num_gaussians)
     z_inv = apply_inverse_rotation(z, angles)
-    print("Inverse rotation shape", z_inv.shape)
     dispersion_values = []
     for num_object in range(z_inv.shape[0]):
         z_inv_object = z_inv[num_object]
@@ -335,7 +327,6 @@ def dlsbd_metric_mixture(z, angles, stabilizers, average: bool = True, distance_
             # print("Number of subspace", num_subspace)
             z_inv_object_subspace = z_inv_object[..., num_subspace * 2:(num_subspace + 1) * 2]
             z_inv_mean_subspace = np.expand_dims(z_inv_mean[num_subspace], axis=0)
-            print("ZINV MEAN SUBSPACE", z_inv_mean[num_subspace].shape)
             # print("ZINV MEAN SUBSPACE", z_inv_mean_subspace.shape, z_inv_object_subspace.shape)
             dispersion_obj = calculate_dispersion(z_inv_object_subspace,
                                                   z_inv_mean_subspace,
@@ -365,12 +356,8 @@ def dlsbd_metric_mixture_monte(z, angles, stabilizers, average: bool = True, dis
     """
     num_gaussians = z.shape[-2]
     num_subspaces = z.shape[-1] // 2
-    print("Number of mixture components", num_gaussians)
-    print("Number of subspaces", num_subspaces)
     angles = repeat_angles_n_gaussians(angles, num_gaussians)
     z_inv = apply_inverse_rotation(z, angles)
-    print("Inverse rotation shape", z_inv.shape)
-    print("Number of objects", z_inv.shape[0])
     dispersion_values = []
     for num_object in range(z_inv.shape[0]):
 
@@ -387,15 +374,12 @@ def dlsbd_metric_mixture_monte(z, angles, stabilizers, average: bool = True, dis
                 # print("Number of subspace", num_subspace)
                 z_inv_object_subspace = z_inv_object[..., num_subspace * 2:(num_subspace + 1) * 2]
                 z_inv_mean_subspace = np.expand_dims(z_inv_mean, axis=0)[..., num_subspace * 2:(num_subspace + 1) * 2]
-                print("ZINV MEAN SUBSPACE MC", z_inv_mean[num_subspace].shape, z_inv_mean_subspace.shape)
-                # print("ZINV MEAN SUBSPACE", z_inv_mean_subspace.shape, z_inv_object_subspace.shape)
                 dispersion_obj = calculate_dispersion(z_inv_object_subspace,
                                                       z_inv_mean_subspace,
                                                       distance_function=distance_function)
                 # print(
                 #     f"Dispersion for object {num_object}, with num stabilizers {stabilizers[num_object]} num subspace {num_subspace} = {dispersion_obj} ")
                 # Get dispersion values per object
-                print("Shape disp obj", dispersion_obj.shape)
                 dispersion_values.append(np.mean(dispersion_obj))
 
     if average:
