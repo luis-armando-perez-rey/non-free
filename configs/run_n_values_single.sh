@@ -5,7 +5,7 @@ source activate gpytorch
 
 # Non-fixed parameters
 dataset_names=("1 2 3 4 5" "1 2 3 4 5" "1 2 3 4 5" "1 2 3 4 5" "1 2 3 4 5" "1 2 3 4 5" "1 2 3 4 5" "1 2 3 4 5" "1 2 3 4 5" "1 2 3 4 5" "1 2 3 4 5" "1 2 3 4 5" "1 2 3 4 5" "1 2 3 4 5" "1 2 3 4 5" "1 2 3 4 5" "1 2 3 4 5" "1 2 3 4 5" "1 2 3 4 5" "1 2 3 4 5" "1 2 3 4 5" "1 2 3 4 5" "1 2 3 4 5" "1 2 3 4 5" "1 2 3 4 5" "1 2 3 4 5" "1 2 3 4 5" "1 2 3 4 5" "1 2 3 4 5" "1 2 3 4 5" "1 2 3 4 5" "1 2 3 4 5" "1 2 3 4 5" "1 2 3 4 5" "1 2 3 4 5" "1 2 3 4 5" "1 2 3 4 5" "1 2 3 4 5" "1 2 3 4 5" "1 2 3 4 5" "1 2 3 4 5" "1 2 3 4 5" "1 2 3 4 5" "1 2 3 4 5" "1 2 3 4 5" "1 2 3 4 5" "1 2 3 4 5" "1 2 3 4 5" "1 2 3 4 5" "1 2 3 4 5")
-dataset_name=("1 2 3 4 5")
+dataset_names=("1 2 3 4 5")
 #dataset_names=("stool_0 chair_0 airplane_0" )
 
 ndatapairs_list=(2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500 2500)
@@ -16,10 +16,10 @@ N_list=(5)
 #N_list=(10 10 10 10 10)
 dataset="arrows"
 extra_dim=3
-epochs=100
-weightequivariance=1
+epochs=200
+weightequivariance=10
 seeds=(17 17 17 17 17 17 17 17 17 17 42 42 42 42 42 42 42 42 42 42 28 28 28 28 28 28 28 28 28 28 19 19 19 19 19 19 19 19 19 19 58 58 58 58 58 58 58 58 58 58)
-gpu=0
+gpu=-1
 
 
 
@@ -27,7 +27,7 @@ gpu=0
 
 # Semi-fixed parameters
 equiv_loss="chamfer"
-batch_size=50
+batch_size=100
 latent_dim=2
 optimizer="adamw"
 lr=1e-4
@@ -55,7 +55,7 @@ do
   dataset_name=${dataset_names[$num_dataset]}
   ndatapairs=${ndatapairs_list[$num_dataset]}
   model_name="${dataset}/${experiment_id}/D${dataset}-D${dataset_name// /_}-L$identity_loss-ED$extra_dim-N$N-M$model-A$model-ID$experiment_id-S$seed"
-  python3 main.py --neptune-user ${neptune_user} --gpu ${gpu} --ndatapairs ${ndatapairs} --chamfer-reg ${chamfer_reg} --weightequivariance ${weightequivariance} --enc-dist ${enc_dist} --latent-dim ${latent_dim} --prior-dist ${prior_dist} --seed ${seed} --decoder ${decoder} --reconstruction-loss ${reconstruction_loss} --autoencoder ${autoencoder} --model ${model} --model-name ${model_name} --lr ${lr} --checkpoints-dir "./saved_models" --optimizer ${optimizer} --dataset ${dataset} --identity-loss ${identity_loss} --dataset_name ${dataset_name} --use-simplified  --num ${N} --extra-dim ${extra_dim} --batch-size ${batch_size} --epochs ${epochs} --data-dir ./data --save-interval ${save_interval} --plot 0 --equiv-loss ${equiv_loss} --neptunetags ${experiment_id}
+#  python3 main.py --no-norm-extra --neptune-user ${neptune_user} --gpu ${gpu} --ndatapairs ${ndatapairs} --chamfer-reg ${chamfer_reg} --weightequivariance ${weightequivariance} --enc-dist ${enc_dist} --latent-dim ${latent_dim} --prior-dist ${prior_dist} --seed ${seed} --decoder ${decoder} --reconstruction-loss ${reconstruction_loss} --autoencoder ${autoencoder} --model ${model} --model-name ${model_name} --lr ${lr} --checkpoints-dir "./saved_models" --optimizer ${optimizer} --dataset ${dataset} --identity-loss ${identity_loss} --dataset_name ${dataset_name} --use-simplified  --num ${N} --extra-dim ${extra_dim} --batch-size ${batch_size} --epochs ${epochs} --data-dir ./data --save-interval ${save_interval} --plot 0 --equiv-loss ${equiv_loss} --neptunetags ${experiment_id}
   python3 visualize_latent_space.py --save-folder=${model_name} --dataset=${dataset} --dataset_name ${dataset_name}
   # In this experiments increase the number of arrows for each dataset
 done
