@@ -30,7 +30,8 @@ def plot_extra_dims(extra_dims, color_labels: Optional = None):
         ax = None
     return fig, ax
 
-def plot_projected_embeddings_pca(embeddings, color_labels:Optional = None, ax:Optional = None):
+
+def plot_projected_embeddings_pca(embeddings, color_labels: Optional = None, ax: Optional = None):
     # Plot embeddings
     if embeddings.shape[-1] == 2:
         print("PCA: Embeddings are already 2 dimensional, no PCA applied")
@@ -49,7 +50,6 @@ def plot_projected_embeddings_pca(embeddings, color_labels:Optional = None, ax:O
         ax.scatter(x_embedded[:, 0], x_embedded[:, 1], c=color_labels)
     ax.set_title("PCA object embeddings")
     return fig, ax
-
 
 
 def plot_images_multi_reconstructions(images, reconstructions):
@@ -498,3 +498,117 @@ def yiq_embedding(theta, phi):
     result[..., 1] = 0.25 * np.cos(phi)
     result[..., 2] = 0.25 * np.sin(phi)
     return yiq_to_rgb(result)
+
+
+def plot_std_distribution(std, ax: Optional = None):
+    """
+    Plots the distribution of the standard deviation of the gaussian mixture
+    :param std: standard deviations
+    :param ax: pyplot axis
+    :return:
+    """
+    if ax is None:
+        fig, ax = plt.subplots(1, 1)
+    else:
+        fig = plt.gcf()
+    ax.hist(std.flatten())
+    ax.set_xlabel("Standard deviation")
+    ax.set_ylabel("Frequency")
+    return fig, ax
+
+
+def plot_cylinder(mean_eval, num_views, ax=None, top_view=False):
+    """
+    Plots embeddings on the cylinder for SO(2) rotations
+    :param mean_eval: embeddings for eval
+    :param num_views: number of views for an object
+    :param ax:
+    :param top_view: if True the cylinder is projected to the top view
+    :return:
+    """
+    if ax is None:
+        if top_view:
+            fig, ax = plt.subplots(1, 1, figsize=(5, 5))
+        else:
+            fig, ax = plt.subplots(1, 1, figsize=(5, 5), subplot_kw={'projection': '3d'})
+    else:
+        fig = plt.gcf()
+
+    for i in range(mean_eval.shape[1]):
+        if top_view:
+            ax.scatter(mean_eval[:num_views, i, 0], mean_eval[:num_views, i, 1])
+        else:
+            ax.scatter(mean_eval[:num_views, i, 0],
+                       mean_eval[:num_views, i, 1], np.arange(num_views))
+    return fig, ax
+
+
+def plot_image_mixture_rec(unique_images, unique_mean, x_rec, num_objects_per_row=20, num_rows=3):
+    fig, ax = plt.subplots(3 * num_rows, num_objects_per_row, figsize=(num_objects_per_row, 3 * num_rows))
+    rows_per_set = 3
+    unique_element = 0
+    total_images = len(unique_images)
+    if total_images < (num_objects_per_row * num_rows):
+        print("Not enough images to plot, will repeat")
+    print(total_images)
+    for num_row_set in range(num_rows):
+        for num_col in range(num_objects_per_row):
+            for row_set in range(rows_per_set):
+                num_row = (3 * num_row_set) + row_set
+                ax[num_row, num_col].set_xticks([])
+                ax[num_row, num_col].set_yticks([])
+                if unique_element < total_images:
+                    if row_set == 0:
+                        add_image_to_ax(unique_images[unique_element], ax=ax[num_row, num_col],
+                                        title=f"{unique_element}")
+                    elif row_set == 1:
+                        plot_mixture_neurreps(unique_mean[unique_element], ax=ax[num_row, num_col])
+                    elif row_set == 2:
+                        add_image_to_ax(x_rec[unique_element], ax=ax[num_row, num_col])
+            unique_element += 1
+    return fig, ax
+
+
+def plot_image_mixture_rec_all(unique_images, unique_mean, x_rec, num_objects_per_row=20, num_rows=3):
+    """
+    Plots the mixture of images, the mixture of embeddings and the reconstructed images
+    :param unique_images:
+    :param unique_mean:
+    :param x_rec:
+    :param num_objects_per_row:
+    :param num_rows:
+    :return:
+    """
+    total_objects_per_plot = num_objects_per_row * num_rows
+    total_plots = np.ceil(len(unique_images) / total_objects_per_plot)
+    figures = []
+    for i in range(int(total_plots)):
+        fig, axes = plot_image_mixture_rec(unique_images.permute((0, 2, 3, 1)).detach().cpu().numpy()[
+                                           i * total_objects_per_plot:(i + 1) * total_objects_per_plot],
+                                           unique_mean[i * total_objects_per_plot: (
+                                                                                           i + 1) * total_objects_per_plot].detach().cpu().numpy(),
+                                           x_rec[i * total_objects_per_plot: (i + 1) * total_objects_per_plot],
+                                           num_objects_per_row,
+                                           num_rows)
+        figures.append(fig)
+    return figures
+
+def plot_clusters(n_clusters, num, ax: Optional = None, label:Optional[str] = None):
+    """
+    Plots the distribution of the number of clusters
+    :param n_clusters:
+    :param num:
+    :param ax:
+    :return:
+    """
+    if ax is None:
+        fig, ax = plt.subplots(1, 1)
+    else:
+        fig = plt.gcf()
+    if label is not None:
+        ax.hist(n_clusters, bins=np.arange(-0.5, num + 1, 1), label=label)
+    else:
+        ax.hist(n_clusters, bins=np.arange(-0.5, num + 1, 1))
+    ax.set_xlabel("Number of clusters")
+    ax.set_ylabel("Number of objects")
+    return fig, ax

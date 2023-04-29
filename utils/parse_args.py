@@ -51,7 +51,10 @@ def get_args():
     parser.add_argument("--prior-dist", default="None", type=str, help="Prior distribution to use")
     parser.add_argument('--use-simplified', default=False, action='store_true',
                         help="Use simplified model that uses single encoder network")
-
+    parser.add_argument('--no-norm-extra', default=False, action='store_true',
+                        help="Don't normalize extra dimension")
+    parser.add_argument('--attached-encoder', default=False, action='store_true',
+                        help="Whether to attach encoder during training to backpropagate")
     parser.add_argument('--variablescale', default=False, action='store_true',
                         help="Use simplified model that uses single encoder network")
     # Plotting
