@@ -4,6 +4,7 @@ from torch import save
 import sys
 # Import datasets
 from datasets.equiv_dset import *
+from dataset_generation.modelnet_efficient import ModelNetDataset
 from models.models_nn import *
 from utils.nn_utils import *
 from utils.plotting_utils import save_embeddings_on_circle
@@ -58,6 +59,27 @@ pickle.dump({'args': args}, open(meta_file, 'wb'))
 # region SET DATASET
 if args.dataset == 'platonics':
     dset = PlatonicMerged(N=30000, data_dir=args.data_dir)
+elif args.dataset == "modelnet_efficient":
+    dset = ModelNetDataset("/data/active_views",
+                           split="train",
+                           object_type_list=args.dataset_name,
+                           examples_per_object=12,
+                           use_random_initial=True,
+                           total_views=360,
+                           fixed_number_views=12,
+                           shuffle_available_views=True,
+                           use_random_choice=False)
+    dset_val = ModelNetDataset("/data/active_views",
+                               split="train",
+                               object_type_list=args.dataset_name,
+                               examples_per_object=12,
+                               use_random_initial=True,
+                               total_views=360,
+                               fixed_number_views=12,
+                               shuffle_available_views=True,
+                               use_random_choice=False,
+                               seed=70)
+
 else:
     print(f"Loading dataset {args.dataset} with dataset name {args.dataset_name}")
     dset = EquivDataset(f'{args.data_dir}/{args.dataset}/', list_dataset_names=args.dataset_name,
@@ -69,10 +91,10 @@ else:
 
 # Setup torch dataset
 # dset, dset_val = torch.utils.data.random_split(dset, [len(dset) - int(len(dset) / 10), int(len(dset) / 10)])
-train_loader = torch.utils.data.DataLoader(dset, batch_size=args.batch_size, shuffle=True)
+train_loader = torch.utils.data.DataLoader(dset, batch_size=args.batch_size, shuffle=True, num_workers=4, pin_memory=True)
 # Using a fixed eval batch size to calculate consistently the hit-rate
 eval_batchsize = 20
-val_loader = torch.utils.data.DataLoader(dset_val, batch_size=eval_batchsize, shuffle=True)
+val_loader = torch.utils.data.DataLoader(dset_val, batch_size=eval_batchsize, shuffle=True, num_workers=4, pin_memory=True)
 
 print("# train set:", len(dset))
 print("# test set:", len(dset_val))
@@ -92,10 +114,12 @@ if args.use_simplified:
         isvae = True
     else:
         isvae = False
-    model = MDNSimplified(img_shape[0], args.latent_dim, N, extra_dim, model=args.model, normalize_extra=True).to(
+    model = MDNSimplified(img_shape[0], args.latent_dim, N, extra_dim, model=args.model,
+                          normalize_extra=not (args.no_norm_extra), vae=isvae).to(
         device)
 else:
-    model = MDN(img_shape[0], args.latent_dim, N, extra_dim, model=args.model, normalize_extra=True).to(device)
+    model = MDN(img_shape[0], args.latent_dim, N, extra_dim, model=args.model,
+                normalize_extra=not (args.no_norm_extra)).to(device)
 parameters = list(model.parameters())
 
 if args.autoencoder == "ae_single" or args.autoencoder == "vae":
@@ -220,9 +244,9 @@ def train(epoch, data_loader, mode='train'):
 
         # region CALCULATE IDENTITY LOSS
         if extra_dim > 0:
-            if args.autoencoder == "vae":
-                loc_extra = extra[-2 * args.extra_dim: -args.extra_dim]
-                loc_extra_next = extra_next[-2 * args.extra_dim: -args.extra_dim]
+            if args.autoencoder.startswith("vae"):
+                loc_extra = extra[..., -2 * args.extra_dim: -args.extra_dim]
+                loc_extra_next = extra_next[..., -2 * args.extra_dim: -args.extra_dim]
                 loss_identity = identity_loss_function(loc_extra, loc_extra_next)
             else:
                 loss_identity = identity_loss_function(extra, extra_next)
@@ -248,25 +272,64 @@ def train(epoch, data_loader, mode='train'):
                 # Make the extra dimension invariant
                 z_next[..., -extra_dim:] = z[..., -extra_dim:]
                 # Calculate reconstruction loss for each of the latent representations
+
+                # Efficient method
+                # z = z.view(-1, z.shape[-1])
+                # z_next = z_next.view(-1, z_next.shape[-1])
+                # if args.attached_encoder:
+                #     x_rec = dec(z)
+                #     x_next_rec = dec(z_next)
+                # else:
+                #     x_rec = dec(z.detach())
+                #     x_next_rec = dec(z_next.detach())
+                # image_repeated = image.repeat(1, args.num, 1, 1, 1).view(-1, *image.shape[1:])
+                # img_next_repeated = img_next.repeat(1, args.num, 1, 1, 1).view(-1, *img_next.shape[1:])
+                # reconstruction_loss += rec_loss_function(x_rec, image_repeated).mean()/ (2 * N)
+                # reconstruction_loss += rec_loss_function(x_next_rec, img_next_repeated).mean()/ (2 * N)
+
+                # Inneficient method
                 for n in range(N):
                     # Divide loss by the number of embeddings and the pairs (2*N)
-                    # TODO: Removed detachment
-                    x_rec = dec(z_next[:, n, :].detach())
-                    # x_rec = dec(z_next[:, n, :])
-                    #TODO: CHanged when decoding one
-                    reconstruction_loss += rec_loss_function(x_rec, image).mean() / (N)
-                    # TODO: Removed reconstruction of next to have larger batch size but this removes the need for the
-                    #  extra dimension to be invariant
-                    # TODO: Removed detachment
-                    # x_next_rec = dec(z_next[:, n])
-                    # reconstruction_loss += rec_loss_function(x_next_rec, img_next).mean() / (2 * N)
+                    if args.attached_encoder:
+                        x_rec = dec(z[:, n])
+                        x_next_rec = dec(z_next[:, n])
+                    else:
+                        x_rec = dec(z[:, n].detach())
+                        x_next_rec = dec(z_next[:, n].detach())
+                    reconstruction_loss += rec_loss_function(x_rec, image).mean() / (2 * N)
+                    reconstruction_loss += rec_loss_function(x_next_rec, img_next).mean() / (2 * N)
+            elif args.autoencoder == "vae_mixture":
+                """
+                Decode each of the group representations separately.
+                """
+                # Get latent variables
+
+                z = get_z_values(p=p, extra=extra, n_samples=args.num, autoencoder_type=args.autoencoder)
+                z_next = get_z_values(p=p_next, extra=extra_next, n_samples=args.num, autoencoder_type=args.autoencoder)
+                # Make the extra dimension invariant
+                z_next[..., -extra_dim:] = z[..., -extra_dim:]
+                # Calculate reconstruction loss for each of the latent representations
+                z = z.view(-1, args.latent_dim)
+                z_next = z_next.view(-1, args.latent_dim)
+
+                if args.attached_encoder:
+                    x_rec = dec(z)
+                    x_next_rec = dec(z_next)
+                else:
+                    x_rec = dec(z.detach())
+                    x_next_rec = dec(z_next.detach())
+                reconstruction_loss += rec_loss_function(x_rec, image).mean() / 2
+                reconstruction_loss += rec_loss_function(x_next_rec, img_next).mean() / 2
             else:
                 # TODO: Review if re-attaching helps
-                x_rec = dec(torch.cat([z_mean.view((z_mean.shape[0], -1)), extra], dim=-1).detach())
-                reconstruction_loss += rec_loss_function(x_rec, image).mean()
+                if args.attached_encoder:
+                    x_rec = dec(torch.cat([z_mean.view((z_mean.shape[0], -1)), extra], dim=-1))
+                else:
+                    x_rec = dec(torch.cat([z_mean.view((z_mean.shape[0], -1)), extra], dim=-1).detach())
+                reconstruction_loss += rec_loss_function(x_rec, image).mean()/2
             # TODO: Review if this helps
-            #     x_rec_next = dec(torch.cat([z_mean_next.view((z_mean.shape[0], -1)), extra], dim=-1).detach())
-            #     reconstruction_loss += rec_loss_function(x_rec_next, img_next).mean()
+                x_rec_next = dec(torch.cat([z_mean_next.view((z_mean.shape[0], -1)), extra], dim=-1).detach())
+                reconstruction_loss += rec_loss_function(x_rec_next, img_next).mean()/2
 
             losses.append(reconstruction_loss)
             if run is not None:
@@ -286,9 +349,9 @@ def train(epoch, data_loader, mode='train'):
                 ((z_mean_pred.unsqueeze(1).unsqueeze(1) - z_mean_next.unsqueeze(2).unsqueeze(0)) ** 2).sum(-1).min(
                     dim=-1)[
                     0].sum(dim=-1)
-        if args.autoencoder == "vae":
-            loc_extra = extra[:, -2 * args.extra_dim: -args.extra_dim]
-            loc_extra_next = extra_next[:, -2 * args.extra_dim: -args.extra_dim]
+        if args.autoencoder.startswith("vae"):
+            loc_extra = extra[:, -2 * extra_dim: -extra_dim]
+            loc_extra_next = extra_next[:, -2 * extra_dim: -extra_dim]
             extra_matrix = ((loc_extra.unsqueeze(0) - loc_extra_next.unsqueeze(1)) ** 2).sum(-1)
         else:
             extra_matrix = ((extra.unsqueeze(0) - extra_next.unsqueeze(1)) ** 2).sum(-1)
@@ -299,7 +362,7 @@ def train(epoch, data_loader, mode='train'):
         # endregion
 
         # region CALCULATE KL LOSS
-        if (args.autoencoder == "vae"):
+        if args.autoencoder.startswith("vae"):
             # Get prior for VAE model
             prior = get_prior(z_mean.shape[0], args.num, 2, args.prior_dist, device)
             if (args.enc_dist == "von-mises-mixture"):
@@ -308,6 +371,16 @@ def train(epoch, data_loader, mode='train'):
                 kl_loss = p.approximate_kl(prior) + p_next.approximate_kl(prior)
             else:
                 kl_loss = None
+            if extra_dim > 0:
+                loc_extra = extra[..., :extra.shape[-1] // 2]
+                logvar_extra = extra[..., extra.shape[-1] // 2:]
+                loc_extra_next = extra_next[..., :extra_next.shape[-1] // 2]
+                logvar_extra_next = extra_next[..., extra_next.shape[-1] // 2:]
+                orbit_prior = torch.distributions.Normal(torch.zeros_like(loc_extra), torch.ones_like(loc_extra))
+                p_orbit = torch.distributions.Normal(loc_extra, torch.exp(logvar_extra / 2.0))
+                p_orbit_next = torch.distributions.Normal(loc_extra_next, torch.exp(logvar_extra_next / 2.0))
+                kl_loss += torch.distributions.kl.kl_divergence(p_orbit, orbit_prior).sum(-1).mean()
+                kl_loss += torch.distributions.kl.kl_divergence(p_orbit_next, orbit_prior).sum(-1).mean()
             losses.append(kl_loss)
         else:
             kl_loss = None
@@ -360,7 +433,7 @@ def train(epoch, data_loader, mode='train'):
                     f"Epoch: {epoch}, Batch: {batch_idx} of {len(data_loader)} Loss: {loss:.3f} Loss "
                     f"equiv: "
                     f" {loss_equiv:.3} Loss reconstruction: {reconstruction_loss:.3}")
-        elif args.autoencoder == "vae":
+        elif args.autoencoder.startswith("vae"):
             if extra_dim > 0:
                 print(
                     f"Epoch: {epoch}, Batch: {batch_idx} of {len(data_loader)} Loss: {loss:.3f} Loss "
