@@ -137,8 +137,8 @@ class MDN(nn.Module):
             self.encoder = DisLibEncoder1D(latent_dim=converted_dim, nc=nc)
             self.encoder_extra = DisLibEncoder1D(latent_dim=extra_dim, nc=nc)
         elif model == "mnistcnn":
-            self.encoder = EncMNIST(latent_dim = converted_dim)
-            self.encoder_extra = EncMNIST(latent_dim = extra_dim)
+            self.encoder = EncMNIST(latent_dim=converted_dim)
+            self.encoder_extra = EncMNIST(latent_dim=extra_dim)
         self.latent_dim = latent_dim
         self.normalize_extra = normalize_extra
         self.extra_dim = extra_dim
@@ -170,11 +170,16 @@ class MDN(nn.Module):
             extra = self.encoder_extra(x)
         return mean, logvar, extra
 
+
+
 class MDNSimplified(nn.Module):
     def __init__(self, nc: int, latent_dim: int, n_gaussians: int, extra_dim: int = 0, model: str = "cnn",
-                 normalize_extra: bool = True):
+                 normalize_extra: bool = True, vae: bool = False):
         super().__init__()
         # Converts the latent dimension for the probabilistic output (means and covs of Gaussians)
+        if vae:
+            # If we use a VAE, we need to output the mean and logvar of the latent space
+            extra_dim = 2 * extra_dim
         if latent_dim == 2:
             converted_dim = 3 * n_gaussians + extra_dim
         elif latent_dim == 3:
@@ -198,7 +203,7 @@ class MDNSimplified(nn.Module):
         elif model == "dislib1":
             self.encoder = DisLibEncoder1D(latent_dim=converted_dim, nc=nc)
         elif model == "mnistcnn":
-            self.encoder = EncMNIST(latent_dim = converted_dim)
+            self.encoder = EncMNIST(latent_dim=converted_dim)
         self.latent_dim = latent_dim
         self.normalize_extra = normalize_extra
         self.extra_dim = extra_dim
@@ -231,7 +236,6 @@ class MDNSimplified(nn.Module):
             if self.normalize_extra:
                 extra = F.normalize(extra, dim=-1)
         return mean, logvar, extra
-
 
 class BaseEncoder(nn.Module):
     def __init__(self, nc: int, latent_dim: int):
