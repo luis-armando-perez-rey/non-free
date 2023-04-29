@@ -139,27 +139,51 @@ class FactorDataset(EquivDatasetStabs):
                  max_data_per_dataset: int = -1, so3_matrices: bool = False, factor_list: List[str] = None):
         super().__init__(path, list_dataset_names, greyscale, max_data_per_dataset, so3_matrices)
         self.factors = []
-        for factor_name in factor_list:
-            self.factors.append(self.load_data(factor_name))
+        if factor_list is not None:
+            for factor_name in factor_list:
+                self.factors.append(self.load_data(factor_name))
+
+    @property
+    def num_objects(self):
+        return self.data.shape[0]
+
+    @property
+    def num_views(self):
+        return self.data.shape[1]
+
+    @property
+    def flat_factors(self):
+        if len(self.factors) == 0:
+            return None
+        else:
+            return [factors.reshape(-1) for factors in self.factors]
 
     def __getitem__(self, index):
-        output_factors = [torch.FloatTensor((factors[index],)) for factors in self.factors]
         if self.greyscale:
-            return [torch.FloatTensor(self.data[index, 0]).unsqueeze(0),
-                    torch.FloatTensor(self.data[index, 1]).unsqueeze(0),
-                    torch.FloatTensor((self.lbls[index],)),
-                    torch.FloatTensor((self.stabs[index],)),
-                    *output_factors]
+            images1 = torch.FloatTensor(self.data[index, 0]).unsqueeze(0)
+            images2 = torch.FloatTensor(self.data[index, 1]).unsqueeze(0)
         else:
-            return [torch.FloatTensor(self.data[index, 0]),
-                    torch.FloatTensor(self.data[index, 1]),
+            images1 = torch.FloatTensor(self.data[index, 0])
+            images2 = torch.FloatTensor(self.data[index, 1])
+
+        if len(self.factors) == 0:
+            return [images1,
+                    images2,
+                    torch.FloatTensor((self.lbls[index],)),
+                    torch.FloatTensor((self.stabs[index],))]
+        else:
+            output_factors = [torch.FloatTensor((factors[index],)) for factors in self.factors]
+            return [images1,
+                    images2,
                     torch.FloatTensor((self.lbls[index],)),
                     torch.FloatTensor((self.stabs[index],)),
                     *output_factors]
+
+
 
 
 class EvalDataset(torch.utils.data.Dataset):
-    def __init__(self, path: str, list_dataset_names: List[str], load_labels: bool = True):
+    def __init__(self, path: str, list_dataset_names: List[str]):
         self.data = np.load(path + list_dataset_names[0] + '_eval_data.npy', mmap_mode='r+')
         self.stabs = np.load(path + list_dataset_names[0] + '_eval_stabilizers.npy', mmap_mode='r+')
         if os.path.isfile(path + list_dataset_names[0] + '_eval_lbls.npy'):
@@ -204,6 +228,12 @@ class EvalDataset(torch.utils.data.Dataset):
     @property
     def num_objects(self):
         return self.data.shape[0]
+
+    @property
+    def num_views(self):
+        return self.data.shape[1]
+
+
 
 
 def PlatonicMerged(N, big=True, data_dir='data'):

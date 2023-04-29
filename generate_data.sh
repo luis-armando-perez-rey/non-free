@@ -111,13 +111,53 @@
 #python3 generate_data.py --n_examples 0 --dataset_name airplane_0-chair_0 --n_arrows 1 --dataset modelnet_quessard
 
 # Symmetric solids
-python3 generate_data.py --n_examples 7500 --n_arrows 0 --dataset_name tetrahedron --dataset symmetric_solids
-python3 generate_data.py --n_examples 750 --n_arrows 0 --dataset_name tetrahedron_val --dataset symmetric_solids
-python3 generate_data.py --n_examples 7500 --n_arrows 1 --dataset_name cube --dataset symmetric_solids
-python3 generate_data.py --n_examples 750 --n_arrows 1 --dataset_name cube_val --dataset symmetric_solids
-
-python3 generate_data.py --n_examples 7500 --n_arrows 2 --dataset_name icosahedron --dataset symmetric_solids
-python3 generate_data.py --n_examples 750 --n_arrows 2 --dataset_name icosahedron_val --dataset symmetric_solids
+#python3 generate_data.py --n_examples 7500 --n_arrows 0 --dataset_name tetrahedron --dataset symmetric_solids
+#python3 generate_data.py --n_examples 750 --n_arrows 0 --dataset_name tetrahedron_val --dataset symmetric_solids
+#python3 generate_data.py --n_examples 7500 --n_arrows 1 --dataset_name cube --dataset symmetric_solids
+#python3 generate_data.py --n_examples 750 --n_arrows 1 --dataset_name cube_val --dataset symmetric_solids
+#
+#python3 generate_data.py --n_examples 7500 --n_arrows 2 --dataset_name icosahedron --dataset symmetric_solids
+#python3 generate_data.py --n_examples 750 --n_arrows 2 --dataset_name icosahedron_val --dataset symmetric_solids
 
 #python3 generate_data.py --n_examples 7500 --n_arrows 5 --dataset_name marked_tetrahedron --dataset symmetric_solids
 #python3 generate_data.py --n_examples 750 --n_arrows 5 --dataset_name marked_tetrahedron_val --dataset symmetric_solids
+
+
+#python3 generate_data.py --n_examples 24 --n_arrows 2 --dataset_name chair- --dataset modelnet_regular
+#python3 generate_data.py --n_examples 12 --n_arrows 2 --dataset_name chair-_val --dataset modelnet_regular
+#
+#python3 generate_data.py --n_examples 12 --n_arrows 2 --dataset_name chair- --dataset modelnet_regular_pairs
+#python3 generate_data.py --n_examples 12 --n_arrows 2 --dataset_name chair-_val --dataset modelnet_regular_pairs
+#
+#python3 generate_data.py --n_examples 12 --n_arrows 2 --dataset_name chair- --dataset modelnet_regular_pairs0
+#python3 generate_data.py --n_examples 12 --n_arrows 2 --dataset_name chair-_val --dataset modelnet_regular_pairs0
+#
+#python3 generate_data.py --n_examples 24 --n_arrows 2 --dataset_name chair- --dataset modelnet_regular0
+#python3 generate_data.py --n_examples 12 --n_arrows 2 --dataset_name chair-_val --dataset modelnet_regular0
+
+# Modelnet regular pairs
+#python3 generate_data.py --n_examples 12 --n_arrows 2 --dataset_name chair- --dataset modelnet_regular_pairs
+#python3 generate_data.py --n_examples 12 --n_arrows 2 --dataset_name chair-_val --dataset modelnet_regular_pairs
+#
+#python3 generate_data.py --n_examples 12 --n_arrows 2 --dataset_name bathtub- --dataset modelnet_regular_pairs
+#python3 generate_data.py --n_examples 12 --n_arrows 2 --dataset_name bathtub-_val --dataset modelnet_regular_pairs
+#
+#python3 generate_data.py --n_examples 12 --n_arrows 2 --dataset_name airplane- --dataset modelnet_regular_pairs
+#python3 generate_data.py --n_examples 12 --n_arrows 2 --dataset_name airplane-_val --dataset modelnet_regular_pairs
+#
+#python3 generate_data.py --n_examples 12 --n_arrows 2 --dataset_name car- --dataset modelnet_regular_pairs
+#python3 generate_data.py --n_examples 12 --n_arrows 2 --dataset_name car-_val --dataset modelnet_regular_pairs
+
+python3 generate_data.py --n_examples 12 --n_arrows 2 --dataset_name airplane- --dataset modelnet_regular_pairs --split_data "all"
+python3 generate_data.py --n_examples 12 --n_arrows 2 --dataset_name car- --dataset modelnet_regular_pairs --split_data "all"
+python3 generate_data.py --n_examples 12 --n_arrows 2 --dataset_name bathtub- --dataset modelnet_regular_pairs --split_data "all"
+python3 generate_data.py --n_examples 12 --n_arrows 2 --dataset_name chair- --dataset modelnet_regular_pairs --split_data "all"
+
+
+#python3 generate_data.py --n_examples 12 --n_arrows 2 --dataset_name airplane- --dataset modelnet_regular_pairs_test --split_data "eval"
+#python3 generate_data.py --n_examples 12 --n_arrows 2 --dataset_name car- --dataset modelnet_regular_pairs_test --split_data "eval"
+#python3 generate_data.py --n_examples 12 --n_arrows 2 --dataset_name bathtub- --dataset modelnet_regular_pairs_test --split_data "eval"
+#python3 generate_data.py --n_examples 12 --n_arrows 2 --dataset_name chair- --dataset modelnet_regular_pairs_test --split_data "eval"
+
+#python3 generate_data.py --n_examples 24 --n_arrows 2 --dataset_name bathtub- --dataset modelnet_regular
+#python3 generate_data.py --n_examples 12 --n_arrows 2 --dataset_name bathtub-_val --dataset modelnet_regular
