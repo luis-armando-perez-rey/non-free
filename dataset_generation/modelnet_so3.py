@@ -18,12 +18,13 @@ def process_pil_image(img):
     return img
 
 def generate_data(load_folder, save_folder, dataset_name, split="train", object_type="airplane", object_id="airplane_0001"):
-    total_images = 5500
+    os.makedirs(save_folder, exist_ok=True)
     training_pairs = 2000
     eval_pairs = 250
     dataset_folder = os.path.join(load_folder, "renders_so3",object_type, split)
     identifiers_folder = os.path.join(dataset_folder, "identifiers")
     images_folder = os.path.join(dataset_folder, "images")
+
 
     # Load the rotations
     quaternions = R.from_quat(np.load(os.path.join(identifiers_folder, "rot_" + object_id + ".npy")))
