@@ -5,6 +5,7 @@ Inspired by https://github.com/kuangliu/pytorch-cifar/blob/master/models/resnet.
 
 import torch
 from torch import nn
+import torchvision
 import torch.nn.functional as F
 
 
@@ -168,6 +169,22 @@ class BasicBlockDec1D(nn.Module):
         return out
 
 
+class ResNet50Enc(nn.Module):
+    """
+    Loads the ResNet50 model and removes the last layer.
+    """
+
+    def __init__(self, z_dim: int = 10):
+        super().__init__()
+        self.z_dim = z_dim
+        self.model = torchvision.models.resnet50(weights=torchvision.models.ResNet50_Weights.IMAGENET1K_V2)
+        self.model.fc = nn.Linear(2048, z_dim)
+
+    def forward(self, x):
+        x = self.model(x)
+        return x
+
+
 class ResNet18Enc(nn.Module):
 
     def __init__(self, num_blocks=None, z_dim=10, nc=3):
@@ -202,6 +219,50 @@ class ResNet18Enc(nn.Module):
         x = F.adaptive_avg_pool2d(x, 1)
         x = x.view(x.size(0), -1)
         x = self.linear(x)
+        return x
+
+
+class ResNet50Dec(nn.Module):
+    def __init__(self, nc=3, z_dim=10, num_blocks=None, ):
+        super().__init__()
+        if num_blocks is None:
+            num_blocks = [2, 2, 2, 2, 2]
+        self.in_planes = 2048
+        self.z_dim = z_dim
+        self.linear = nn.Linear(z_dim, self.in_planes)
+        self.dim_activation = (self.in_planes, 7, 7)
+        self.activation_size = self.dim_activation[0] * self.dim_activation[1] * self.dim_activation[2]
+        self.reshape_linear = nn.Linear(self.in_planes, self.activation_size)  # shape (2048, 7, 7)
+        self.layer1 = self._make_layer(BasicBlockDec, 1024, num_blocks[0], stride=2)  # shape (1024, 14, 14)
+        self.layer2 = self._make_layer(BasicBlockDec, 512, num_blocks[1], stride=2)  # shape (512, 28, 28)
+        self.layer3 = self._make_layer(BasicBlockDec, 256, num_blocks[2], stride=2)  # shape (256, 56, 56)
+        self.layer4 = self._make_layer(BasicBlockDec, 128, num_blocks[3], stride=2)  # shape (128, 112, 112)
+        self.layer5 = self._make_layer(BasicBlockDec, 64, num_blocks[4], stride=2)  # shape (64,224, 224)
+
+        self.bn1 = nn.BatchNorm2d(64)
+        # noinspection PyTypeChecker
+        self.conv1 = nn.Conv2d(64, nc, kernel_size=3, stride=1, padding=1, bias=False)  # shape (3, 224, 224)
+
+    def _make_layer(self, block_class, planes, num_Blocks, stride):
+        strides = [stride] + [1] * (num_Blocks - 1)
+        layers = []
+        for stride in strides:
+            layers += [block_class(self.in_planes, stride)]
+            self.in_planes = planes
+        return nn.Sequential(*layers)
+
+    def forward(self, x):
+        x = torch.relu(self.linear(x))
+        x = self.reshape_linear(x)
+        x = x.view(x.size(0), *self.dim_activation)
+        # Apply inverse convolutional blocks
+        x = self.layer1(x)
+        x = self.layer2(x)
+        x = self.layer3(x)
+        x = self.layer4(x)
+        x = self.layer5(x)
+        x = self.bn1(x)
+        x = self.conv1(x)
         return x
 
 
@@ -246,7 +307,6 @@ class ResNet18Dec(nn.Module):
         return x
 
 
-
 class EncMNIST(nn.Module):
 
     def __init__(self, latent_dim):
@@ -277,6 +337,7 @@ class EncMNIST(nn.Module):
         x = self.flatten(x)
         x = self.encoder_lin(x)
         return x
+
 
 class DecMNIST(nn.Module):
 

@@ -27,6 +27,8 @@ class Decoder(nn.Module):
             self.decoder = ResNet1DDec(nc, total_latent_dim)
         elif model == "resnet":
             self.decoder = ResNet18Dec(nc, total_latent_dim)
+        elif model == "resnet50":
+            self.decoder = ResNet50Dec(nc, total_latent_dim)
         elif model == "mnistcnn":
             self.decoder = DecMNIST(encoded_space_dim=total_latent_dim)
         else:
@@ -124,6 +126,9 @@ class MDN(nn.Module):
         elif model == 'resnet':
             self.encoder = ResNet18Enc(z_dim=converted_dim, nc=nc)  # works only for latent_dim=2!
             self.encoder_extra = ResNet18Enc(z_dim=extra_dim, nc=nc)
+        elif model == "resnet50":
+            self.encoder = ResNet50Enc(z_dim=converted_dim)
+            self.encoder_extra = ResNet50Enc(z_dim=extra_dim)
         elif model == "resnet1d":
             self.encoder = ResNet1DEnc(z_dim=converted_dim, nc=nc)
             self.encoder_extra = ResNet1DEnc(z_dim=extra_dim, nc=nc)
@@ -194,6 +199,8 @@ class MDNSimplified(nn.Module):
             self.encoder = BaseEncoder(nc, converted_dim)  # works only for latent_dim=2!
         elif model == 'resnet':
             self.encoder = ResNet18Enc(z_dim=converted_dim, nc=nc)  # works only for latent_dim=2!
+        elif model == "resnet50":
+            self.encoder = ResNet50Enc(z_dim=converted_dim)
         elif model == "resnet1d":
             self.encoder = ResNet1DEnc(z_dim=converted_dim, nc=nc)
         elif model == "dense":
