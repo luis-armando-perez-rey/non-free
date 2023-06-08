@@ -80,7 +80,7 @@ print("Identifiers shape", identifiers.shape)
 img_shape = np.array(img.shape[1:])
 
 
-if args.dataset !="modelnet_efficient":
+if not(args.dataset.startswith("modelnet_efficient")):
     flat_images_tensor = torch.Tensor(eval_dset.flat_images).to(device)  # transform to torch tensor
     eval_tensor_dset = torch.utils.data.TensorDataset(flat_images_tensor)  # create your datset
     print("Flat images shape", eval_dset.flat_images.shape)

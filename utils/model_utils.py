@@ -28,12 +28,14 @@ def reload_model(model_dir: str, autoencoder: str = 'None', device: Optional[str
     return model, decoder
 
 
-def get_embeddings(eval_dataloader, model, variablescale=False, device: Optional[str] = None):
+def get_embeddings(eval_dataloader, model, variablescale=False, device: Optional[str] = None, pairs=False):
     """
     Get the embeddings of the evaluation dataset
     :param eval_dataloader:
     :param model: model used to generate the embeddings
     :param variablescale: whether the scale is variable or fixed
+    :param device: device to use
+    :param pairs: whether to encode pairs of images or single images in the dataset
     :return:
     """
     # region GET EMBEDDINGS
@@ -41,10 +43,14 @@ def get_embeddings(eval_dataloader, model, variablescale=False, device: Optional
     logvar_eval = []
     extra_eval = []
     for num_batch, batch in enumerate(eval_dataloader):
-        if device is None:
-            mean_eval_, logvar_eval_, extra_eval_ = model(batch[0])
+        if pairs:
+            batch_images = torch.cat([batch[0], batch[1]], dim=0)
         else:
-            mean_eval_, logvar_eval_, extra_eval_ = model(batch[0].to(device))
+            batch_images = batch[0]
+        if device is None:
+            mean_eval_, logvar_eval_, extra_eval_ = model(batch_images)
+        else:
+            mean_eval_, logvar_eval_, extra_eval_ = model(batch_images.to(device))
         mean_eval.append(mean_eval_.detach())
         logvar_eval.append(logvar_eval_.detach())
         extra_eval.append(extra_eval_.detach())
@@ -57,6 +63,8 @@ def get_embeddings(eval_dataloader, model, variablescale=False, device: Optional
     std_eval = torch.exp(logvar_eval / 2.) / 10
     print("Embeddings shape: ", mean_eval.shape, logvar_eval.shape, std_eval.shape, extra_eval.shape)
     return mean_eval, logvar_eval, std_eval, extra_eval
+
+
 
 
 def sigmoid(x):
