@@ -6,7 +6,7 @@ from dataset_generation.modelnet_efficient import ModelNetDataset, ModelNetDatas
 
 def get_loading_parameters(data_dir: str, dataset, dataset_name, so3_matrices: bool = False):
     loading_parameters = []
-    if dataset == "modelnet_efficient":
+    if dataset.startswith("modelnet_efficient"):
         train_data_parameters = dict(render_folder="/data/active_views",
                                      split="train",
                                      object_type_list=dataset_name,
@@ -16,11 +16,38 @@ def get_loading_parameters(data_dir: str, dataset, dataset_name, so3_matrices: b
                                      fixed_number_views=12,
                                      shuffle_available_views=True,
                                      use_random_choice=False)
+        if dataset == "modelnet_efficient224":
+            train_data_parameters["resolution"] = 224
+
+        elif dataset == "modelnet_efficient_test":
+            train_data_parameters["split"] = "test"
         loading_parameters.append(train_data_parameters)
         eval_data_parameters = train_data_parameters.copy()
         eval_data_parameters.pop("shuffle_available_views")
         eval_data_parameters["seed"] = 70
         loading_parameters.append(eval_data_parameters)
+    elif dataset.startswith("shrec21shape"):
+        train_data_parameters = dict(render_folder="./data/shrec21shape",
+                                     split="train",
+                                     object_type_list=dataset_name,
+                                     examples_per_object=12,
+                                     use_random_initial=True,
+                                     total_views=12,
+                                     fixed_number_views=12,
+                                     shuffle_available_views=True,
+                                     use_random_choice=False)
+        if dataset == "shrec21shape224":
+            train_data_parameters["resolution"] = 224
+
+        elif dataset == "shrec21shape_test":
+            train_data_parameters["split"] = "test"
+        loading_parameters.append(train_data_parameters)
+        eval_data_parameters = train_data_parameters.copy()
+        eval_data_parameters.pop("shuffle_available_views")
+        eval_data_parameters["seed"] = 70
+        loading_parameters.append(eval_data_parameters)
+
+
     return loading_parameters
 
 
@@ -50,10 +77,16 @@ def get_dataset(data_dir, dataset, dataset_name, so3_matrices=False):
         dset = FactorDataset(f'{data_dir}/{dataset}/', list_dataset_names=eval_dset_names,
                              factor_list=["orbit", "class"])
         dset_eval = None
-    elif dataset == "modelnet_efficient":
+    elif dataset.startswith("modelnet_efficient"):
         loading_parameters = get_loading_parameters(data_dir, dataset, dataset_name, so3_matrices)
         dset = ModelNetDatasetComplete(**loading_parameters[0])
         dset_eval = ModelNetEvalDataset(**loading_parameters[1])
+    elif dataset.startswith("shrec21shape"):
+        loading_parameters = get_loading_parameters(data_dir, dataset, dataset_name, so3_matrices)
+        dset = ModelNetDatasetComplete(**loading_parameters[0])
+        dset_eval = ModelNetEvalDataset(**loading_parameters[1])
+
+
 
     else:
         dset = EquivDatasetStabs(f'{data_dir}/{dataset}/', list_dataset_names=dataset_name, so3_matrices=so3_matrices)

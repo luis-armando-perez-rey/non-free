@@ -59,26 +59,60 @@ pickle.dump({'args': args}, open(meta_file, 'wb'))
 # region SET DATASET
 if args.dataset == 'platonics':
     dset = PlatonicMerged(N=30000, data_dir=args.data_dir)
-elif args.dataset == "modelnet_efficient":
-    dset = ModelNetDataset("/data/active_views",
-                           split="train",
-                           object_type_list=args.dataset_name,
-                           examples_per_object=12,
-                           use_random_initial=True,
-                           total_views=360,
-                           fixed_number_views=12,
-                           shuffle_available_views=True,
-                           use_random_choice=False)
-    dset_val = ModelNetDataset("/data/active_views",
-                               split="train",
-                               object_type_list=args.dataset_name,
-                               examples_per_object=12,
-                               use_random_initial=True,
-                               total_views=360,
-                               fixed_number_views=12,
-                               shuffle_available_views=True,
-                               use_random_choice=False,
-                               seed=70)
+elif args.dataset.startswith("modelnet_efficient"):
+    dset_params = dict(render_folder="/data/active_views",
+                       split="train",
+                       object_type_list=args.dataset_name,
+                       examples_per_object=12,
+                       use_random_initial=True,
+                       total_views=360,
+                       fixed_number_views=12,
+                       shuffle_available_views=True,
+                       use_random_choice=False)
+    dset_eval_params = dict(render_folder="/data/active_views",
+                            split="train",
+                            object_type_list=args.dataset_name,
+                            examples_per_object=12,
+                            use_random_initial=True,
+                            total_views=360,
+                            fixed_number_views=12,
+                            shuffle_available_views=True,
+                            use_random_choice=False,
+                            seed=70)
+    if args.dataset == "modelnet_efficient224":
+        dset_params["resolution"] = 224
+        dset_eval_params["resolution"] = 224
+
+    dset = ModelNetDataset(**dset_params)
+    dset_val = ModelNetDataset(**dset_eval_params)
+elif args.dataset == "shrec21shape":
+    dset_params = dict(render_folder="./data/shrec21shape",
+                       split="train",
+                       object_type_list=args.dataset_name,
+                       examples_per_object=12,
+                       use_random_initial=True,
+                       total_views=12,
+                       fixed_number_views=12,
+                       shuffle_available_views=True,
+                       use_random_choice=False)
+    dset_eval_params = dict(render_folder="./data/shrec21shape",
+                            split="train",
+                            object_type_list=args.dataset_name,
+                            examples_per_object=12,
+                            use_random_initial=True,
+                            total_views=12,
+                            fixed_number_views=12,
+                            shuffle_available_views=True,
+                            use_random_choice=False,
+                            seed=70)
+    if args.dataset == "shrec21shape224":
+        dset_params["resolution"] = 224
+        dset_eval_params["resolution"] = 224
+
+    dset = ModelNetDataset(**dset_params)
+    dset_val = ModelNetDataset(**dset_eval_params)
+
+
 
 else:
     print(f"Loading dataset {args.dataset} with dataset name {args.dataset_name}")
@@ -91,10 +125,12 @@ else:
 
 # Setup torch dataset
 # dset, dset_val = torch.utils.data.random_split(dset, [len(dset) - int(len(dset) / 10), int(len(dset) / 10)])
-train_loader = torch.utils.data.DataLoader(dset, batch_size=args.batch_size, shuffle=True, num_workers=4, pin_memory=True)
+train_loader = torch.utils.data.DataLoader(dset, batch_size=args.batch_size, shuffle=True, num_workers=4,
+                                           pin_memory=True)
 # Using a fixed eval batch size to calculate consistently the hit-rate
 eval_batchsize = 20
-val_loader = torch.utils.data.DataLoader(dset_val, batch_size=eval_batchsize, shuffle=True, num_workers=4, pin_memory=True)
+val_loader = torch.utils.data.DataLoader(dset_val, batch_size=eval_batchsize, shuffle=True, num_workers=4,
+                                         pin_memory=True)
 
 print("# train set:", len(dset))
 print("# test set:", len(dset_val))
@@ -326,10 +362,10 @@ def train(epoch, data_loader, mode='train'):
                     x_rec = dec(torch.cat([z_mean.view((z_mean.shape[0], -1)), extra], dim=-1))
                 else:
                     x_rec = dec(torch.cat([z_mean.view((z_mean.shape[0], -1)), extra], dim=-1).detach())
-                reconstruction_loss += rec_loss_function(x_rec, image).mean()/2
-            # TODO: Review if this helps
+                reconstruction_loss += rec_loss_function(x_rec, image).mean() / 2
+                # TODO: Review if this helps
                 x_rec_next = dec(torch.cat([z_mean_next.view((z_mean.shape[0], -1)), extra], dim=-1).detach())
-                reconstruction_loss += rec_loss_function(x_rec_next, img_next).mean()/2
+                reconstruction_loss += rec_loss_function(x_rec_next, img_next).mean() / 2
 
             losses.append(reconstruction_loss)
             if run is not None:

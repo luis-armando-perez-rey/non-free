@@ -42,10 +42,18 @@ class ModelNetDataset(Dataset):
             shuffle_rows(self.available_views, self.rng)
 
         self.data_list = self.get_data_list()
+        self.transforms = self.get_torch_transforms()
 
-        self.transforms = torch.nn.Sequential(
-            torchvision.transforms.Resize((self.resolution, self.resolution)),
-        )
+    def get_torch_transforms(self):
+        if self.resolution == 224:
+            transforms = torch.nn.Sequential(
+            )
+        else:
+            transforms = torch.nn.Sequential(
+                torchvision.transforms.Resize((self.resolution, self.resolution), antialias=True),
+            )
+        return transforms
+
 
     def get_object_ids(self):
         object_ids = []
@@ -177,13 +185,14 @@ class ModelNetDatasetComplete(ModelNetDataset):
         path2 = self.data_list[1][idx]
         action = self.data_list[2][idx]
         stabilizer = self.data_list[3][idx]
-        object_type = self.data_list[4][idx]
+        orbit_int = self.data_list[4][idx]
+        object_type = self.data_list[5][idx]
 
         image1 = torchvision.io.read_image(path1, torchvision.io.ImageReadMode.RGB)
         image2 = torchvision.io.read_image(path2, torchvision.io.ImageReadMode.RGB)
         image1 = self.transforms(image1).float() / 255.
         image2 = self.transforms(image2).float() / 255.
-        return image1, image2, action, stabilizer, object_type
+        return image1, image2, action, stabilizer, orbit_int, object_type
 
 
 class ModelNetUniqueDataset(ModelNetDatasetComplete):

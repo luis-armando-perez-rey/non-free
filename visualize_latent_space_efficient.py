@@ -81,7 +81,7 @@ print("Identifiers shape", identifiers.shape)
 
 img_shape = np.array(img.shape[1:])
 
-if args.dataset != "modelnet_efficient":
+if not(args.dataset.startswith("modelnet_efficient") or args.dataset.startswith("shrec21shape")):
     flat_images_tensor = torch.Tensor(eval_dset.flat_images).to(device)  # transform to torch tensor
     eval_tensor_dset = torch.utils.data.TensorDataset(flat_images_tensor)  # create your datset
     print("Flat images shape", eval_dset.flat_images.shape)
@@ -131,7 +131,7 @@ if args.latent_dim == 2 or args.latent_dim == 4:
         reshaped_stabs = eval_dset.flat_stabs.reshape((eval_dset.num_objects, eval_dset.num_views, 2))
         eval_stabs = eval_dset.flat_stabs
     else:
-        if args.dataset == "modelnet_efficient":
+        if args.dataset.startswith("modelnet_efficient") or args.dataset.startswith("shrec21shape"):
             eval_actions = get_data_from_dataloader(eval_dataloader, 1).numpy()
             eval_stabs = get_data_from_dataloader(eval_dataloader, 2).numpy()
             eval_orbits = get_data_from_dataloader(eval_dataloader, 3).numpy()
@@ -384,17 +384,29 @@ if args.latent_dim == 2 or args.latent_dim == 4:
 
     # Note that the batch size is fixed to 20
     eval_batch_size = 20
+    if args.dataset.startswith("modelnet"):
+        eval_dset = ModelNetDataset("/data/active_views",
+                                    split="train",
+                                    object_type_list=args.dataset_name,
+                                    examples_per_object=12,
+                                    use_random_initial=True,
+                                    total_views=360,
+                                    fixed_number_views=12,
+                                    shuffle_available_views=True,
+                                    use_random_choice=False,
+                                    seed=70)
+    elif args.dataset.startswith("shrec21shape"):
+        eval_dset = ModelNetDataset("./data/shrec21shape",
+                                    split="train",
+                                    object_type_list=args.dataset_name,
+                                    examples_per_object=12,
+                                    use_random_initial=True,
+                                    total_views=12,
+                                    fixed_number_views=12,
+                                    shuffle_available_views=True,
+                                    use_random_choice=False,
+                                    seed=70)
 
-    eval_dset = ModelNetDataset("/data/active_views",
-                                split="train",
-                                object_type_list=args.dataset_name,
-                                examples_per_object=12,
-                                use_random_initial=True,
-                                total_views=360,
-                                fixed_number_views=12,
-                                shuffle_available_views=True,
-                                use_random_choice=False,
-                                seed=70)
 
     val_loader = torch.utils.data.DataLoader(eval_dset, batch_size=eval_batch_size, shuffle=True, num_workers=4,
                                              pin_memory=True)
