@@ -1,5 +1,5 @@
 import os
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 
 import numpy as np
 import torch
@@ -13,7 +13,7 @@ class ModelNetDataset(Dataset):
     def __init__(self, render_folder, split, object_type_list, examples_per_object: int, use_random_initial: bool,
                  total_views: int,
                  fixed_number_views: int, shuffle_available_views: bool, use_random_choice: bool, seed: int = 1789,
-                 resolution: int = 64):
+                 resolution: int = 64, object_ids: Optional[List[List[int]]] = None,):
         self.rng = np.random.default_rng(seed=seed)
         self.render_folder = render_folder
         self.examples_per_object = examples_per_object
@@ -23,9 +23,12 @@ class ModelNetDataset(Dataset):
         self.resolution = resolution  # Resolution of the images
         self.object_type_list = object_type_list
 
+        self.object_ids = object_ids
+
         # Properties that depend on the previous ones
         # Join all the object types to be used
         self.object_ids = self.get_object_ids()
+
         # Get the directories path for each object and the integer class
         self.object_dirs, self.object_type_list = self.get_object_dirs()
 
@@ -57,8 +60,11 @@ class ModelNetDataset(Dataset):
 
     def get_object_ids(self):
         object_ids = []
-        for object_type in self.object_type_list:
-            object_ids += get_object_ids(self.render_folder, self.split, object_type)
+        for num_object_type, object_type in enumerate(self.object_type_list):
+            object_type_ids = get_object_ids(self.render_folder, self.split, object_type)
+            if self.object_ids is not None:
+                object_type_ids = [object_type_ids[i] for i in self.object_ids[num_object_type]]
+            object_ids += object_type_ids
         return np.array(object_ids)
 
     @property
@@ -137,9 +143,9 @@ class ModelNetDatasetComplete(ModelNetDataset):
     def __init__(self, render_folder, split, object_type_list, examples_per_object: int, use_random_initial: bool,
                  total_views: int,
                  fixed_number_views: int, shuffle_available_views: bool, use_random_choice: bool, seed: int = 1789,
-                 resolution: int = 64):
+                 resolution: int = 64, object_ids: Optional[List[List[int]]] = None):
         super().__init__(render_folder, split, object_type_list, examples_per_object, use_random_initial, total_views,
-                         fixed_number_views, shuffle_available_views, use_random_choice, seed, resolution)
+                         fixed_number_views, shuffle_available_views, use_random_choice, seed, resolution, object_ids)
 
     def get_data_list(self) -> List[torch.Tensor]:
         """
@@ -200,10 +206,10 @@ class ModelNetUniqueDataset(ModelNetDatasetComplete):
                  total_views: int,
                  fixed_number_views: int, use_random_choice: bool, seed: int = 1789,
                  resolution: int = 64,
-                 index_unique_factors: int = 0):
+                 index_unique_factors: int = 0, object_ids: Optional[List[List[int]]] = None):
         self.index_unique_factors = index_unique_factors
         super().__init__(render_folder, split, object_type_list, examples_per_object, use_random_initial, total_views,
-                         fixed_number_views, False, use_random_choice, seed, resolution)
+                         fixed_number_views, False, use_random_choice, seed, resolution, object_ids)
         self.filter_data_based_on_unique_factors_()
 
     def filter_data_based_on_unique_factors_(self) -> np.array:
@@ -235,9 +241,9 @@ class ModelNetEvalDataset(ModelNetDataset):
     def __init__(self, render_folder, split, object_type_list, examples_per_object: int, use_random_initial: bool,
                  total_views: int,
                  fixed_number_views: int, use_random_choice: bool, seed: int = 1789,
-                 resolution: int = 64):
+                 resolution: int = 64, object_ids: List[List[str]] = None):
         super().__init__(render_folder, split, object_type_list, examples_per_object, use_random_initial, total_views,
-                         fixed_number_views, False, use_random_choice, seed, resolution)
+                         fixed_number_views, False, use_random_choice, seed, resolution, object_ids)
 
     def get_data_list(self) -> List[torch.Tensor]:
         """

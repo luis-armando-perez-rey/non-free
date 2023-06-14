@@ -17,7 +17,10 @@ AVAILABLE_OBJECTS = ["airplane", "bathtub", "bed", "bench",
                      "person", "piano", "plant", "radio",
                      "range_hood", "sink", "sofa", "stairs",
                      "stool", "table", "tent", "toilet",
-                     "tv_stand", "vase", "wardrobe", "xbox"]
+                     "tv_stand", "vase", "wardrobe", "xbox",
+                     #shrec21
+                     "basin", "bowl", "figurine", "jar", "pitcher", "plate", "pot"
+                     ]
 ID_MULTIPLIER = 10000
 OBJECT_DICT_INT = {object_type: i for i, object_type in enumerate(AVAILABLE_OBJECTS)}
 

@@ -198,7 +198,7 @@ def generate_dataset(dataset):
         object_type = args.dataset_name.split("-")[0]
         assert object_type in modelnet_regular.AVAILABLE_OBJECTS, f"Unknown modelnet object {args.dataset_name}"
 
-        generate_eval_data_parameters = dict(render_folder="/data/active_views",
+        generate_eval_data_parameters = dict(render_folder="/data/volume_2/data/active_views",
                                                 dataset_folder=f"./data/{dataset}",
                                                 dataset_name=args.dataset_name,
                                                 object_type=object_type,
@@ -213,7 +213,7 @@ def generate_dataset(dataset):
     elif dataset == "modelnet_regular_pairs_test":
         object_type = args.dataset_name.split("-")[0]
         assert object_type in modelnet_regular.AVAILABLE_OBJECTS, f"Unknown modelnet object {args.dataset_name}"
-        generate_eval_data_parameters = dict(render_folder="/data/active_views",
+        generate_eval_data_parameters = dict(render_folder="/data/volume_2/data/active_views",
                                              dataset_folder=f"./data/{dataset}",
                                              dataset_name=args.dataset_name,
                                              object_type=object_type,
@@ -227,7 +227,7 @@ def generate_dataset(dataset):
     elif dataset == "modelnet_regular_pairs_test0":
         object_type = args.dataset_name.split("-")[0]
         assert object_type in modelnet_regular.AVAILABLE_OBJECTS, f"Unknown modelnet object {args.dataset_name}"
-        generate_eval_data_parameters = dict(render_folder="/data/active_views",
+        generate_eval_data_parameters = dict(render_folder="/data/volume_2/data/active_views",
                                              dataset_folder=f"./data/{dataset}",
                                              dataset_name=args.dataset_name,
                                              object_type=object_type,
@@ -241,7 +241,7 @@ def generate_dataset(dataset):
     elif dataset == "modelnet_regular0":
         object_type = args.dataset_name.split("-")[0]
         assert object_type in modelnet_regular.AVAILABLE_OBJECTS, f"Unknown modelnet object {args.dataset_name}"
-        generate_eval_data_parameters = dict(render_folder="/data/active_views",
+        generate_eval_data_parameters = dict(render_folder="/data/volume_2/data/active_views",
                                              dataset_folder=f"./data/{dataset}",
                                              dataset_name=args.dataset_name,
                                              object_type=object_type,
@@ -257,7 +257,7 @@ def generate_dataset(dataset):
     elif dataset == "modelnet_regular_pairs0":
         object_type = args.dataset_name.split("-")[0]
         assert object_type in modelnet_regular.AVAILABLE_OBJECTS, f"Unknown modelnet object {args.dataset_name}"
-        generate_eval_data_parameters = dict(render_folder="/data/active_views",
+        generate_eval_data_parameters = dict(render_folder="/data/volume_2/data/active_views",
                                              dataset_folder=f"./data/{dataset}",
                                              dataset_name=args.dataset_name,
                                              object_type=object_type,
