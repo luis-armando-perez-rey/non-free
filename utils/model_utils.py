@@ -17,10 +17,16 @@ def reload_model(model_dir: str, autoencoder: str = 'None', device: Optional[str
         device = 'cpu'
     model_file = os.path.join(model_dir, 'model.pt')
     print("Loading model from: ", model_file)
-    model = torch.load(model_file).to(device)
+    if device == 'cpu':
+        model = torch.load(model_file, map_location=torch.device('cpu'))
+    else:
+        model = torch.load(model_file).to(device)
     if autoencoder != 'None':
         decoder_file = os.path.join(model_dir, 'decoder.pt')
-        decoder = torch.load(decoder_file).to(device)
+        if device == 'cpu':
+            decoder = torch.load(decoder_file, map_location=torch.device('cpu'))
+        else:
+            decoder = torch.load(decoder_file).to(device)
         decoder.eval()
     else:
         decoder = None
@@ -43,6 +49,8 @@ def get_embeddings(eval_dataloader, model, variablescale=False, device: Optional
     logvar_eval = []
     extra_eval = []
     for num_batch, batch in enumerate(eval_dataloader):
+        if num_batch % 100 == 0:
+            print("Images encoded: ", num_batch)
         if pairs:
             batch_images = torch.cat([batch[0], batch[1]], dim=0)
         else:

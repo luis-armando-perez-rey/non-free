@@ -21,6 +21,8 @@ class Decoder(nn.Module):
         total_latent_dim = latent_dim + extra_dim
         if model == "cnn1":
             self.decoder = BaseDecoder1D(nc, total_latent_dim)
+        elif model == "cnn":
+            self.decoder = BaseDecoder(nc, total_latent_dim)
         elif model == "dense":
             self.decoder = BaseDenseDecoder(nc, total_latent_dim)
         elif model == "resnet1d":
@@ -274,6 +276,38 @@ class BaseEncoder(nn.Module):
 
     def forward(self, x):
         return self.encoder(x)
+
+class BaseDecoder(nn.Module):
+    def __init__(self, nc: int, latent_dim: int):
+        """
+        Based convolutional neural network decoder that takes images with nc channels and returns a latent vector of
+        latent_dim dimensions.
+        :param nc: number of input channels
+        :param latent_dim: output latent dimension
+        """
+        super().__init__()
+        self.decoder = nn.Sequential(
+            nn.Linear(latent_dim, 128),
+            nn.ReLU(),
+            nn.Linear(128, 128),
+            nn.ReLU(),
+            nn.Linear(128, 256),
+            nn.ReLU(),
+            View([-1, 256, 1, 1]),
+            nn.ConvTranspose2d(256, 128, 4),
+            nn.ReLU(True),
+            nn.ConvTranspose2d(128, 128, 4, 2, 1),
+            nn.ReLU(True),
+            nn.ConvTranspose2d(128, 64, 4, 2, 1),
+            nn.ReLU(True),
+            nn.ConvTranspose2d(64, 64, 4, 2, 1),
+            nn.ReLU(True),
+            nn.ConvTranspose2d(64, nc, 4, 2, 1),
+        )
+
+
+    def forward(self, x):
+        return self.decoder(x)
 
 
 class DisLibEncoder1D(nn.Module):
