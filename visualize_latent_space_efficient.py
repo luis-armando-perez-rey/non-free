@@ -385,7 +385,7 @@ if args.latent_dim == 2 or args.latent_dim == 4:
     # Note that the batch size is fixed to 20
     eval_batch_size = 20
     if args.dataset.startswith("modelnet"):
-        eval_dset = ModelNetDataset("/data/active_views",
+        eval_dset = ModelNetDataset("/data/volume_2/data/active_views",
                                     split="train",
                                     object_type_list=args.dataset_name,
                                     examples_per_object=12,

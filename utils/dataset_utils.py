@@ -7,7 +7,7 @@ from dataset_generation.modelnet_efficient import ModelNetDataset, ModelNetDatas
 def get_loading_parameters(data_dir: str, dataset, dataset_name, so3_matrices: bool = False):
     loading_parameters = []
     if dataset.startswith("modelnet_efficient"):
-        train_data_parameters = dict(render_folder="/data/active_views",
+        train_data_parameters = dict(render_folder="/data/volume_2/data/active_views",
                                      split="train",
                                      object_type_list=dataset_name,
                                      examples_per_object=12,
@@ -21,6 +21,12 @@ def get_loading_parameters(data_dir: str, dataset, dataset_name, so3_matrices: b
 
         elif dataset == "modelnet_efficient_test":
             train_data_parameters["split"] = "test"
+        elif dataset == "modelnet_efficient_single":
+            train_data_parameters["object_ids"] = [list(np.arange(15))] * len(dataset_name)
+
+
+
+
         loading_parameters.append(train_data_parameters)
         eval_data_parameters = train_data_parameters.copy()
         eval_data_parameters.pop("shuffle_available_views")

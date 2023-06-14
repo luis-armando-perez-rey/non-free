@@ -141,3 +141,4 @@ dmypy.json
 visualizations/
 utils/comet_config.py
 saved_models/
+configs/

@@ -24,6 +24,7 @@ else:
     run = None
 print(args)
 
+
 # endregion
 
 # region TORCH SETUP
@@ -60,7 +61,7 @@ pickle.dump({'args': args}, open(meta_file, 'wb'))
 if args.dataset == 'platonics':
     dset = PlatonicMerged(N=30000, data_dir=args.data_dir)
 elif args.dataset.startswith("modelnet_efficient"):
-    dset_params = dict(render_folder="/data/active_views",
+    dset_params = dict(render_folder="/data/volume_2/data/active_views",
                        split="train",
                        object_type_list=args.dataset_name,
                        examples_per_object=12,
@@ -69,7 +70,7 @@ elif args.dataset.startswith("modelnet_efficient"):
                        fixed_number_views=12,
                        shuffle_available_views=True,
                        use_random_choice=False)
-    dset_eval_params = dict(render_folder="/data/active_views",
+    dset_eval_params = dict(render_folder="/data/volume_2/data/active_views",
                             split="train",
                             object_type_list=args.dataset_name,
                             examples_per_object=12,
@@ -82,6 +83,13 @@ elif args.dataset.startswith("modelnet_efficient"):
     if args.dataset == "modelnet_efficient224":
         dset_params["resolution"] = 224
         dset_eval_params["resolution"] = 224
+    if args.dataset == "modelnet_efficient_single":
+        object_ids_used = 100
+        fixed_number_views = 12
+        dset_params["object_ids"] = [list(np.arange(object_ids_used))]*len(args.dataset_name)
+        dset_params["fixed_number_views"] = fixed_number_views
+        dset_eval_params["object_ids"] = [[object_ids_used+1]]*len(args.dataset_name)
+        dset_eval_params["fixed_number_views"] = fixed_number_views
 
     dset = ModelNetDataset(**dset_params)
     dset_val = ModelNetDataset(**dset_eval_params)
@@ -360,11 +368,13 @@ def train(epoch, data_loader, mode='train'):
                 # TODO: Review if re-attaching helps
                 if args.attached_encoder:
                     x_rec = dec(torch.cat([z_mean.view((z_mean.shape[0], -1)), extra], dim=-1))
+                    x_rec_next = dec(torch.cat([z_mean_next.view((z_mean.shape[0], -1)), extra], dim=-1))
                 else:
                     x_rec = dec(torch.cat([z_mean.view((z_mean.shape[0], -1)), extra], dim=-1).detach())
+                    x_rec_next = dec(torch.cat([z_mean_next.view((z_mean.shape[0], -1)), extra], dim=-1).detach())
                 reconstruction_loss += rec_loss_function(x_rec, image).mean() / 2
                 # TODO: Review if this helps
-                x_rec_next = dec(torch.cat([z_mean_next.view((z_mean.shape[0], -1)), extra], dim=-1).detach())
+
                 reconstruction_loss += rec_loss_function(x_rec_next, img_next).mean() / 2
 
             losses.append(reconstruction_loss)

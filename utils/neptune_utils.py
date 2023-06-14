@@ -7,9 +7,12 @@ def initialize_neptune_run(user, project_name):
     return run
 
 
-def reload_neptune_run(user, project_name, path: str):
+def reload_neptune_run(user, project_name, path: str, api_token: Optional[str] = None):
     sys_id = load_neptune_id(path)
-    run = neptune.init_run(project=f"{user}/{project_name}", run=sys_id)
+    if api_token is not None:
+        run = neptune.init_run(project=f"{user}/{project_name}", api_token=api_token, with_id=sys_id)
+    else:
+        run = neptune.init_run(project=f"{user}/{project_name}", with_id=sys_id)
     return run
 
 
