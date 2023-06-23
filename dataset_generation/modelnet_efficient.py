@@ -5,8 +5,9 @@ import numpy as np
 import torch
 import torchvision
 from dataset_generation.modelnet_regular import get_initial_orientation, shuffle_rows, get_object_ids, OBJECT_DICT_INT, \
-    stabilizer_dict, ID_MULTIPLIER
+    stabilizer_dict, ID_MULTIPLIER, INT_DICT_OBJECT
 from torch.utils.data import Dataset
+from models.classifiers import rebase_labels
 
 
 class ModelNetDataset(Dataset):
@@ -200,8 +201,35 @@ class ModelNetDatasetComplete(ModelNetDataset):
         image2 = self.transforms(image2).float() / 255.
         return image1, image2, action, stabilizer, orbit_int, object_type
 
+class ModelNetDatasetClassify(ModelNetDatasetComplete):
+
+    def __init__(self, render_folder, split, object_type_list, examples_per_object: int, use_random_initial: bool,
+                 total_views: int,
+                 fixed_number_views: int, shuffle_available_views: bool, use_random_choice: bool, seed: int = 1789,
+                 resolution: int = 64, object_ids: Optional[List[List[int]]] = None, rebase: bool = True):
+        super().__init__(render_folder, split, object_type_list, examples_per_object, use_random_initial, total_views,
+                         fixed_number_views, shuffle_available_views, use_random_choice, seed, resolution, object_ids)
+        if rebase:
+            self.data_list[5] = rebase_labels(self.data_list[5])
+
+    def __getitem__(self, idx):
+        path1 = self.data_list[0][idx]
+        path2 = self.data_list[1][idx]
+        action = self.data_list[2][idx]
+        object_type = self.data_list[5][idx]
+
+        image1 = torchvision.io.read_image(path1, torchvision.io.ImageReadMode.RGB)
+        image2 = torchvision.io.read_image(path2, torchvision.io.ImageReadMode.RGB)
+        image1 = self.transforms(image1).float() / 255.
+        image2 = self.transforms(image2).float() / 255.
+        return image1, image2, action, object_type
+
+
 
 class ModelNetUniqueDataset(ModelNetDatasetComplete):
+    """
+    Dataset for the complete modelnet dataset which outputs the image pairs, action, stabilizers and object type int
+    """
     def __init__(self, render_folder, split, object_type_list, examples_per_object: int, use_random_initial: bool,
                  total_views: int,
                  fixed_number_views: int, use_random_choice: bool, seed: int = 1789,
@@ -217,7 +245,6 @@ class ModelNetUniqueDataset(ModelNetDatasetComplete):
         Get the unique factors for the object type
         :param object_type: The object type
         :param num_object: The number of the object
-        :return: The unique factors
         """
         selection_identifiers = self.data_list[self.index_unique_factors].clone()
         unique_identifiers = torch.unique(selection_identifiers)

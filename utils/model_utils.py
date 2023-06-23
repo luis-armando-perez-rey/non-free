@@ -72,7 +72,22 @@ def get_embeddings(eval_dataloader, model, variablescale=False, device: Optional
     print("Embeddings shape: ", mean_eval.shape, logvar_eval.shape, std_eval.shape, extra_eval.shape)
     return mean_eval, logvar_eval, std_eval, extra_eval
 
+def save_embeddings(dir_path, mean, logvar, extra, identifier:str = ""):
+    """
+    Save the embeddings to the directory
+    :param dir_path: directory path
+    :param mean: mean of the embeddings
+    :param logvar: logvar of the embeddings
+    :param extra: identity embeddings
+    :param identifier: identifier for the embeddings
+    :return:
+    """
+    save_torch_tensor_as_npy(dir_path, mean, identifier+"mean")
+    save_torch_tensor_as_npy(dir_path, logvar, identifier+"logvar")
+    save_torch_tensor_as_npy(dir_path, extra, identifier+"extra")
 
+def save_torch_tensor_as_npy(dir_path, tensor: torch.Tensor, identifier:str = ""):
+    np.save(os.path.join(dir_path, identifier+".npy"), tensor.numpy())
 
 
 def sigmoid(x):

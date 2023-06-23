@@ -3,6 +3,8 @@ import pickle
 import numpy as np
 import os
 import torch
+import pandas as pd
+import seaborn as sns
 import matplotlib.pyplot as plt
 from scipy.spatial.transform import Rotation as R
 from utils.dataset_utils import get_dataset, get_data_from_dataloader, get_loading_parameters
@@ -10,13 +12,13 @@ from utils.nn_utils import get_rotated_mean, make_rotation_matrix, hitRate_gener
 from utils.plotting_utils import plot_extra_dims, plot_images_distributions, \
     plot_mixture_neurreps, add_image_to_ax, add_distribution_to_ax_torus, save_embeddings_on_circle, yiq_embedding, \
     plot_embeddings_eval_torus, plot_projected_embeddings_pca, plot_std_distribution, plot_cylinder, \
-    plot_image_mixture_rec_all, plot_clusters
+    plot_image_mixture_rec_all, plot_clusters, plot_histograms
 from utils.plotting_utils_so3 import visualize_so3_probabilities
 from utils.torch_utils import torch_data_to_numpy
 from utils.disentanglement_metric import dlsbd_metric_mixture, dlsbd_metric_mixture_monte
 from utils.model_utils import reload_model, get_embeddings, get_reconstructions, sigmoid, get_n_clusters_noise
 from datasets.equiv_dset import EquivDataset
-from dataset_generation.modelnet_efficient import ModelNetUniqueDataset, ModelNetDataset
+from dataset_generation.modelnet_efficient import ModelNetUniqueDataset, ModelNetDataset, INT_DICT_OBJECT
 
 # region PARSE ARGUMENTS
 parser = argparse.ArgumentParser()
@@ -81,7 +83,7 @@ print("Identifiers shape", identifiers.shape)
 
 img_shape = np.array(img.shape[1:])
 
-if not(args.dataset.startswith("modelnet_efficient") or args.dataset.startswith("shrec21shape")):
+if not (args.dataset.startswith("modelnet_efficient") or args.dataset.startswith("shrec21shape")):
     flat_images_tensor = torch.Tensor(eval_dset.flat_images).to(device)  # transform to torch tensor
     eval_tensor_dset = torch.utils.data.TensorDataset(flat_images_tensor)  # create your datset
     print("Flat images shape", eval_dset.flat_images.shape)
@@ -136,6 +138,7 @@ if args.latent_dim == 2 or args.latent_dim == 4:
             eval_stabs = get_data_from_dataloader(eval_dataloader, 2).numpy()
             eval_orbits = get_data_from_dataloader(eval_dataloader, 3).numpy()
             eval_object_types = get_data_from_dataloader(eval_dataloader, 4).numpy()
+            reshaped_eval_object_types = eval_object_types.reshape((eval_dset.num_objects, eval_dset.num_views))
             reshaped_eval_actions = eval_actions.reshape((eval_dset.num_objects, eval_dset.num_views))
             reshaped_stabs = eval_stabs.reshape((eval_dset.num_objects, eval_dset.num_views))
         else:
@@ -147,17 +150,50 @@ if args.latent_dim == 2 or args.latent_dim == 4:
     reshaped_mean_eval = mean_eval.reshape(
         (eval_dset.num_objects, eval_dset.num_views, args.num, args.latent_dim)).detach().cpu().numpy()
 
-    dlsbd = dlsbd_metric_mixture(reshaped_mean_eval, reshaped_eval_actions, reshaped_stabs, distance_function="chamfer")
-    dlsbd_monte = dlsbd_metric_mixture_monte(reshaped_mean_eval, reshaped_eval_actions, reshaped_stabs,
+    dlsbd = dlsbd_metric_mixture(reshaped_mean_eval, reshaped_eval_actions, reshaped_stabs,average=False, distance_function="chamfer")
+    dlsbd_monte = dlsbd_metric_mixture_monte(reshaped_mean_eval, reshaped_eval_actions, reshaped_stabs, average=False,
                                              distance_function="chamfer")
-    print("DLSBD Metric", dlsbd)
-    print("DLSBD Metric Monte", dlsbd_monte)
+
+    # Plot the distribution of DLSBD values per object
+    fig, ax2 = plot_histograms(np.log(dlsbd), "log DLSBD", "Frequency")
+    # Add vertical red line corresponding to the mean
+    ax2.axvline(np.mean(np.log(dlsbd)), color="red")
+    if run is not None:
+        run["plots/log_dlsbd_histogram"].upload(fig)
+        plt.close(fig)
+    if args.dataset.startswith("modelnet_efficient") or args.dataset.startswith("shrec21shape"):
+        print("DLSBD shape", dlsbd.shape, "reshaped eval actions shape", reshaped_eval_actions.shape)
+        df = pd.DataFrame({'Value': np.log(dlsbd), 'Class': reshaped_eval_object_types[:, 0]})
+        df["Str_class"] = df["Class"].apply(lambda x: INT_DICT_OBJECT[x])
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+        sns.violinplot(x='Str_class', y='Value', data=df, inner='quartile', ax=ax)
+        ax.set_title('Log DLSBD per class')
+        if run is not None:
+            run["plots/log_dlsbd_violinplot"].upload(fig)
+            plt.close(fig)
+
+
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+        for i in np.unique(eval_object_types):
+            fig, ax = plot_histograms(np.log(dlsbd_monte[eval_object_types == i]), f"log DLSBD Monte Carlo", "Frequency", alpha=0.5, label = INT_DICT_OBJECT[i], ax=ax)
+            if run is not None:
+                run["metrics/mean_log_dlsbd_monte_"+INT_DICT_OBJECT[i]] = np.mean(dlsbd_monte[eval_object_types == i])
+                run["metrics/std_log_dlsbd_monte_" + INT_DICT_OBJECT[i]] = np.std(dlsbd_monte[eval_object_types == i])
+        ax.legend()
+        if run is not None:
+            run["plots/dlsbd_monte_histogram_all"].upload(fig)
+            plt.close(fig)
+
+    print("DLSBD Metric", np.mean(dlsbd))
+    print("DLSBD Metric Monte", np.mean(dlsbd_monte))
 
     np.save(f'{model_path}/dlsbd.npy', [dlsbd])
     np.save(f'{model_path}/dlsbd_monte.npy', [dlsbd_monte])
     if run is not None:
-        run["metrics/dlsbd"].log(dlsbd)
-        run["metrics/dlsbd_monte"].log(dlsbd)
+        run["metrics/dlsbd"].log(np.mean(dlsbd))
+        run["metrics/dlsbd_monte"].log(np.mean(dlsbd))
     # endregion
 
     # region PLOT STD DISTRIBUTION
@@ -248,7 +284,8 @@ if args.latent_dim == 2 or args.latent_dim == 4:
     dset_unique_loader = torch.utils.data.DataLoader(dset_unique, batch_size=10, shuffle=False, num_workers=4,
                                                      pin_memory=True)
 
-    unique_mean, unique_logvar, unique_std, unique_extra = get_embeddings(dset_unique_loader, model, args.variablescale, device)
+    unique_mean, unique_logvar, unique_std, unique_extra = get_embeddings(dset_unique_loader, model, args.variablescale,
+                                                                          device)
     unique_std = np.exp(unique_logvar.detach().cpu().numpy() / 2.) / 10
     print(unique_mean.shape, unique_extra.shape)
     # endregion
@@ -302,7 +339,8 @@ if args.latent_dim == 2 or args.latent_dim == 4:
     dset_unique_loader = torch.utils.data.DataLoader(dset_unique, batch_size=10, shuffle=False, num_workers=4,
                                                      pin_memory=True)
 
-    unique_mean, unique_logvar, unique_std, unique_extra = get_embeddings(dset_unique_loader, model, args.variablescale, device)
+    unique_mean, unique_logvar, unique_std, unique_extra = get_embeddings(dset_unique_loader, model, args.variablescale,
+                                                                          device)
     num_unique_orbits = len(unique_mean)
 
     if args.latent_dim != 4:
@@ -407,7 +445,6 @@ if args.latent_dim == 2 or args.latent_dim == 4:
                                     use_random_choice=False,
                                     seed=70)
 
-
     val_loader = torch.utils.data.DataLoader(eval_dset, batch_size=eval_batch_size, shuffle=True, num_workers=4,
                                              pin_memory=True)
     print("# test set:", len(eval_dset))
@@ -486,7 +523,7 @@ elif args.latent_dim == 3:
         x_rec = x_rec.reshape((num_unique_orbits, num_unique_examples, *x_rec.shape[-3:]))
         for j in range(len(x_rec)):
             fig, axes = plt.subplots(1, num_unique_examples)
-            fig2, axes2 = plt.subplots(1, num_unique_examples)
+            fig, axes2 = plt.subplots(1, num_unique_examples)
             for k, rec in enumerate(x_rec[j]):
                 if num_unique_examples == 1:
                     add_image_to_ax(1 / (1 + np.exp(-rec)), axes)
@@ -498,8 +535,8 @@ elif args.latent_dim == 3:
             if run is not None:
                 run["plots/reconstruction" + str(j)].upload(fig)
             if run is not None:
-                run["plots/input_image" + str(j)].upload(fig2)
-            fig2.savefig(os.path.join(save_folder, f"input_image_{j}.png"), bbox_inches='tight')
+                run["plots/input_image" + str(j)].upload(fig)
+            fig.savefig(os.path.join(save_folder, f"input_image_{j}.png"), bbox_inches='tight')
 
     for j in range(10):
         # plt.figure()

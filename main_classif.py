@@ -4,25 +4,24 @@ from torch import save
 import sys
 # Import datasets
 from datasets.equiv_dset import *
-from dataset_generation.modelnet_efficient import ModelNetDataset
+from dataset_generation.modelnet_efficient import ModelNetDatasetClassify
 from models.models_nn import *
 from utils.nn_utils import *
 from utils.plotting_utils import save_embeddings_on_circle
 from models.losses import EquivarianceLoss, ReconstructionLoss, IdentityLoss, estimate_entropy, matrix_dist
 from models.distributions import MixtureDistribution, get_prior, get_z_values
+from models.classifiers import SimpleClassifierDropout
 
 # region PARSE ARGUMENTS
 parser = get_args()
 args = parser.parse_args()
 if args.neptune_user != "":
     from utils.neptune_utils import initialize_neptune_run, save_sys_id
-
     run = initialize_neptune_run(args.neptune_user, "non-free")
     run["parameters"] = vars(args)
     run["sys/tags"].add(args.neptunetags)
 else:
     run = None
-print(args)
 
 
 # endregion
@@ -44,6 +43,7 @@ decoder_file = os.path.join(model_path, "decoder.pt")
 figures_dir = os.path.join(model_path, 'figures')
 make_dir(figures_dir)
 model_file = os.path.join(model_path, 'model.pt')
+classifier_file = os.path.join(model_path, 'classifier.pt')
 meta_file = os.path.join(model_path, 'metadata.pkl')
 # Neptune txt file
 if run is not None:
@@ -83,6 +83,8 @@ elif args.dataset.startswith("modelnet_efficient"):
     if args.dataset == "modelnet_efficient224":
         dset_params["resolution"] = 224
         dset_eval_params["resolution"] = 224
+    if args.dataset == "modelnet_efficient_init0":
+        dset_params["use_random_initial"] = False
     if args.dataset == "modelnet_efficient_single":
         object_ids_used = 100
         fixed_number_views = 12
@@ -91,8 +93,8 @@ elif args.dataset.startswith("modelnet_efficient"):
         dset_eval_params["object_ids"] = [[object_ids_used+1]]*len(args.dataset_name)
         dset_eval_params["fixed_number_views"] = fixed_number_views
 
-    dset = ModelNetDataset(**dset_params)
-    dset_val = ModelNetDataset(**dset_eval_params)
+    dset = ModelNetDatasetClassify(**dset_params)
+    dset_val = ModelNetDatasetClassify(**dset_eval_params)
 elif args.dataset == "shrec21shape":
     dset_params = dict(render_folder="./data/shrec21shape",
                        split="train",
@@ -144,7 +146,7 @@ print("# train set:", len(dset))
 print("# test set:", len(dset_val))
 
 # Sample data
-img, _, acn = next(iter(train_loader))
+img, _, acn, _ = next(iter(train_loader))
 img_shape = img.shape[1:]
 # endregion
 
@@ -159,8 +161,7 @@ if args.use_simplified:
     else:
         isvae = False
     model = MDNSimplified(img_shape[0], args.latent_dim, N, extra_dim, model=args.model,
-                          normalize_extra=not (args.no_norm_extra), vae=isvae).to(
-        device)
+                          normalize_extra=not (args.no_norm_extra), vae=isvae).to(device)
 else:
     model = MDN(img_shape[0], args.latent_dim, N, extra_dim, model=args.model,
                 normalize_extra=not (args.no_norm_extra)).to(device)
@@ -181,6 +182,10 @@ else:
         dec_dim = 4 * N
     else:
         dec_dim = 0
+
+dropout_p_list = [0.5]*3
+clsf = SimpleClassifierDropout(args.latent_dim+extra_dim, hidden_layers_list=[20, 15, 10], num_classes = len(args.dataset_name), dropout_p_list=dropout_p_list).to(device)
+parameters += list(clsf.parameters())
 
 if (args.autoencoder != "None") & (args.decoder != "None"):
     dec = Decoder(nc=img_shape[0], latent_dim=dec_dim, extra_dim=extra_dim, model=args.decoder).to(device)
@@ -205,6 +210,7 @@ errors_hitrate = []
 identity_loss_function = IdentityLoss(args.identity_loss, temperature=args.tau)
 equiv_loss_train_function = EquivarianceLoss(args.equiv_loss, chamfer_reg=args.chamfer_reg)
 equiv_loss_val_function = EquivarianceLoss("chamfer_val")
+classification_loss_function = torch.nn.CrossEntropyLoss()
 # endregion
 
 
@@ -215,6 +221,8 @@ def train(epoch, data_loader, mode='train'):
     mu_id_loss = 0
     mu_hit_rate = 0
     mu_entropy = 0
+    mu_classif_loss = 0
+    mu_accuracy = 0
     global_step = len(data_loader) * epoch
 
     # Chamfer distance is used for validation
@@ -228,17 +236,19 @@ def train(epoch, data_loader, mode='train'):
     # Initialize the losses that will be used for logging with Neptune
     total_batches = len(data_loader)
 
-    for batch_idx, (image, img_next, action) in enumerate(data_loader):
+    for batch_idx, (image, img_next, action, object_class) in enumerate(data_loader):
         batch_size = image.shape[0]
         global_step += batch_size
 
         if mode == 'train':
             optimizer.zero_grad()
             model.train()
+            clsf.train()
             if args.autoencoder != "None":
                 dec.train()
 
         elif mode == 'val':
+            clsf.eval()
             model.eval()
             if args.autoencoder != "None":
                 dec.eval()
@@ -246,6 +256,7 @@ def train(epoch, data_loader, mode='train'):
         image = image.to(device)
         img_next = img_next.to(device)
         action = action.to(device)
+        object_class = object_class.to(device)
 
         # z_mean and z_mean_next have shape (batch_size, n, latent_dim)
 
@@ -382,6 +393,39 @@ def train(epoch, data_loader, mode='train'):
                 run[mode + "/batch/reconstruction"].log(reconstruction_loss)
         # endregion
 
+        # region CALCULATE CLASSIFICATION LOSS
+        classification_loss = torch.tensor(0, dtype=image.dtype).to(device)
+        object_class = torch.unsqueeze(object_class, dim=1)
+        object_class = torch.tile(object_class, (1, args.num))
+        object_class = object_class.view(-1)
+        z_classif_output = clsf(z.view(-1, z.shape[-1]))
+        z_next_classif_output = clsf(z_next.view(-1, z_next.shape[-1]))
+        classification_loss += classification_loss_function(z_classif_output, object_class).mean() / 2
+        classification_loss += classification_loss_function(z_next_classif_output, object_class).mean() / 2
+        # Calculate accuracy
+        _, predicted = torch.max(torch.softmax(z_classif_output, 1), 1)
+        _, predicted_next = torch.max(torch.softmax(z_next_classif_output, 1), 1)
+        correct_initial = (predicted == object_class).sum().item()
+        correct_next = (predicted_next == object_class).sum().item()
+        accuracy = (correct_initial + correct_next)/(predicted.shape[0]*2)
+        if run is not None:
+            run[mode + "/batch/accuracy"].log(accuracy)
+
+
+        losses.append(classification_loss)
+
+
+
+        if run is not None:
+            run[mode + "/batch/classification"].log(classification_loss)
+        # endregion
+
+
+
+
+
+        # endregion
+
         # region CALCULATE HIT-RATE
         # if mode == "val":
         if args.latent_dim == 3:
@@ -472,7 +516,9 @@ def train(epoch, data_loader, mode='train'):
                       f"Loss equiv: {loss_equiv:.3f}\t"
                       f"Identity: {loss_identity:.3f}\t"
                       f"Reconstruction: {reconstruction_loss:.3f}\t"
-                      f"Hit-Rate: {hitrate:.3f}\t"
+                      f"Hit-Rate: {hitrate:.3f}\t",
+                        f"Classification: {classification_loss:.3f}\t",
+                      f"Accuracy: {accuracy:.3f}\t",
                       )
             else:
                 print(
@@ -497,6 +543,9 @@ def train(epoch, data_loader, mode='train'):
 
         mu_loss += loss.item()
         mu_rec_loss += reconstruction_loss.item()
+        mu_classif_loss += classification_loss.item()
+        mu_accuracy += accuracy
+
 
         if mode == 'train':
             loss.backward()
@@ -511,6 +560,8 @@ def train(epoch, data_loader, mode='train'):
     mu_id_loss /= total_batches
     mu_hit_rate /= total_batches
     mu_entropy /= total_batches
+    mu_classif_loss /= total_batches
+    mu_accuracy /= total_batches
 
     if mode == 'val':
         errors.append(mu_loss)
@@ -541,6 +592,7 @@ def train(epoch, data_loader, mode='train'):
 
         if (epoch % args.save_interval) == 0:
             save(model, model_file)
+            save(clsf, classifier_file)
             if args.autoencoder != "None":
                 save(dec, decoder_file)
 
@@ -551,6 +603,8 @@ def train(epoch, data_loader, mode='train'):
         run[mode + "/epoch/loss"].log(mu_loss)
         run[mode + "/epoch/hitrate"].log(mu_hit_rate)
         run[mode + "/epoch/entropy"].log(mu_entropy)
+        run[mode + "/epoch/classification"].log(mu_classif_loss)
+        run[mode + "/epoch/accuracy"].log(mu_accuracy)
         if args.autoencoder != "None":
             run[mode + "/epoch/reconstruction"].log(mu_rec_loss)
         run[mode + "/epoch/equivariance"].log(mu_equiv_loss)

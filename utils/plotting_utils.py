@@ -5,6 +5,7 @@ import numpy as np
 from matplotlib.patches import Ellipse
 from typing import Optional
 from sklearn.decomposition import PCA
+from sklearn.metrics import confusion_matrix
 
 AVAILABLE_TAB_COLORS = ["tab:blue", "tab:orange", "tab:green", "tab:red", "tab:purple", "tab:brown", "tab:pink",
                         "tab:gray", "tab:olive", "tab:cyan"]
@@ -516,6 +517,27 @@ def plot_std_distribution(std, ax: Optional = None):
     ax.set_ylabel("Frequency")
     return fig, ax
 
+def plot_histograms(values, x_label: Optional[str] = None, y_label:Optional[str] = None, ax: Optional = None, label: Optional[str] = None, alpha:float = 1.0):
+    """
+    Plots histograms of the values
+    :param values:
+    :param x_label:
+    :param y_label:
+    :param ax:
+    :return:
+    """
+    if ax is None:
+        fig, ax = plt.subplots(1, 1)
+    else:
+        fig = plt.gcf()
+    ax.hist(values, label=label, alpha=alpha)
+    if x_label is not None:
+        ax.set_xlabel(x_label)
+    if y_label is not None:
+        ax.set_ylabel(y_label)
+    return fig, ax
+
+
 
 def plot_cylinder(mean_eval, num_views, ax=None, top_view=False):
     """
@@ -612,3 +634,17 @@ def plot_clusters(n_clusters, num, ax: Optional = None, label:Optional[str] = No
     ax.set_xlabel("Number of clusters")
     ax.set_ylabel("Number of objects")
     return fig, ax
+
+
+def plot_confusion_matrix(y_test, y_prediction):
+    """
+    Plots the confusion matrix
+    :param y_test: y_test labels
+    :param y_prediction: y_prediction labels
+    :return:
+    """
+    cm = confusion_matrix(y_test, y_prediction)
+    fig = plt.figure(figsize=(10, 8))
+    sns.heatmap(cm / np.sum(cm), annot=True,
+                fmt='.1%')
+    return fig

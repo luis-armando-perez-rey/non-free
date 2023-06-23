@@ -23,7 +23,7 @@ AVAILABLE_OBJECTS = ["airplane", "bathtub", "bed", "bench",
                      ]
 ID_MULTIPLIER = 10000
 OBJECT_DICT_INT = {object_type: i for i, object_type in enumerate(AVAILABLE_OBJECTS)}
-
+INT_DICT_OBJECT = {i: object_type for i, object_type in enumerate(AVAILABLE_OBJECTS)}
 stabilizer_dict = {object_type: 1 for object_type in AVAILABLE_OBJECTS}
 
 

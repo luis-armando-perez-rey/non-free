@@ -21,6 +21,15 @@ def get_loading_parameters(data_dir: str, dataset, dataset_name, so3_matrices: b
 
         elif dataset == "modelnet_efficient_test":
             train_data_parameters["split"] = "test"
+        elif dataset == "modelnet_efficient_test_initial0":
+            train_data_parameters["split"] = "test"
+            train_data_parameters["use_random_initial"] = False
+        elif dataset == "modelnet_efficient_init0":
+            train_data_parameters["split"] = "test"
+            train_data_parameters["use_random_initial"] = False
+        elif dataset == "modelnet_efficient_test_initialrnd":
+            train_data_parameters["split"] = "test"
+            train_data_parameters["use_random_initial"] = True
         elif dataset == "modelnet_efficient_single":
             train_data_parameters["object_ids"] = [list(np.arange(15))] * len(dataset_name)
 

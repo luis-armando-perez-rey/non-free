@@ -64,6 +64,18 @@ def get_categorical(z, clf):
     return torch.distributions.Categorical(probs)
 
 
+def get_entropy_classifier(z: torch.Tensor, clf: torch.nn.Module) -> torch.Tensor:
+    """
+    Calculates the entropy of the categorical distribution
+    :param z:
+    :param clf:
+    :return:
+    """
+    p_dist = get_categorical(z, clf)
+    entropy = p_dist.entropy()
+    return entropy
+
+
 def get_entropy_gradients(z, clf):
     """
     Calculates the gradients of the entropy of the categorical distribution with respect to the input
